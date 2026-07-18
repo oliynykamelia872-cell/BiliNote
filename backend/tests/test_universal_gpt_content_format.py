@@ -8,6 +8,7 @@ import pathlib
 import sys
 import types
 import unittest
+from dataclasses import dataclass
 
 
 def _install_stubs():
@@ -45,6 +46,11 @@ def _install_stubs():
 
     request_chunker_mod = types.ModuleType("app.gpt.request_chunker")
 
+    @dataclass
+    class _ChunkPayload:
+        segments: list
+        image_urls: list
+
     class _RequestChunker:
         def __init__(self, *_args, **_kwargs):
             pass
@@ -52,6 +58,7 @@ def _install_stubs():
         def group_texts_by_budget(self, texts, _builder, **_kwargs):
             return [texts]
 
+    request_chunker_mod.ChunkPayload = _ChunkPayload
     request_chunker_mod.RequestChunker = _RequestChunker
 
     gpt_model_mod = types.ModuleType("app.models.gpt_model")

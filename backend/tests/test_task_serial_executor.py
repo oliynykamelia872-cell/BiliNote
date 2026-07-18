@@ -16,8 +16,8 @@ SerialTaskExecutor = task_serial_executor.SerialTaskExecutor
 
 
 class TestTaskSerialExecutor(unittest.TestCase):
-    def test_executor_runs_tasks_one_by_one(self):
-        executor = SerialTaskExecutor()
+    def test_executor_respects_worker_limit(self):
+        executor = SerialTaskExecutor(max_workers=1)
         state_lock = threading.Lock()
         state = {"active": 0, "peak_active": 0}
 
@@ -36,6 +36,40 @@ class TestTaskSerialExecutor(unittest.TestCase):
             t.join()
 
         self.assertEqual(state["peak_active"], 1)
+        executor.shutdown()
+
+    def test_reserve_rejects_duplicate_until_task_finishes(self):
+        executor = SerialTaskExecutor(max_workers=1)
+        started = threading.Event()
+        release = threading.Event()
+
+        def work():
+            started.set()
+            release.wait(timeout=1)
+            return "done"
+
+        self.assertTrue(executor.reserve("task-1"))
+        thread = threading.Thread(target=lambda: executor.run_reserved("task-1", work))
+        thread.start()
+        self.assertTrue(started.wait(timeout=1))
+        self.assertFalse(executor.reserve("task-1"))
+        self.assertTrue(executor.is_active("task-1"))
+
+        release.set()
+        thread.join(timeout=1)
+        self.assertFalse(executor.is_active("task-1"))
+        self.assertTrue(executor.reserve("task-1"))
+        executor.shutdown()
+
+    def test_run_reserved_releases_id_after_failure(self):
+        executor = SerialTaskExecutor(max_workers=1)
+        self.assertTrue(executor.reserve("task-1"))
+
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            executor.run_reserved("task-1", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+
+        self.assertFalse(executor.is_active("task-1"))
+        executor.shutdown()
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import tempfile
+import threading
 from abc import ABC
 from typing import Union, Optional, List
 
@@ -17,11 +18,22 @@ from app.utils.url_parser import extract_video_id
 from app.services.cookie_manager import CookieConfigManager
 
 logger = logging.getLogger(__name__)
+_DOWNLOAD_LOCKS: dict[str, threading.Lock] = {}
+_DOWNLOAD_LOCKS_GUARD = threading.Lock()
 
 # Inject the dm_img_* / web_location risk-control params Bilibili's wbi/playurl
 # gateway now requires; without them the API path returns HTTP 412. See
 # app/downloaders/bilibili_dm_patch.py for details.
 apply_bilibili_dm_img_patch()
+
+
+def _get_download_lock(video_id: str) -> threading.Lock:
+    with _DOWNLOAD_LOCKS_GUARD:
+        lock = _DOWNLOAD_LOCKS.get(video_id)
+        if lock is None:
+            lock = threading.Lock()
+            _DOWNLOAD_LOCKS[video_id] = lock
+        return lock
 
 
 class BilibiliDownloader(Downloader, ABC):
@@ -52,7 +64,8 @@ class BilibiliDownloader(Downloader, ABC):
         video_url: str,
         output_dir: Union[str, None] = None,
         quality: DownloadQuality = "fast",
-        need_video:Optional[bool]=False
+        need_video: Optional[bool] = False,
+        skip_download: bool = False,
     ) -> AudioDownloadResult:
         if output_dir is None:
             output_dir = get_data_dir()
@@ -60,6 +73,8 @@ class BilibiliDownloader(Downloader, ABC):
             output_dir=self.cache_data
         os.makedirs(output_dir, exist_ok=True)
 
+        expected_video_id = extract_video_id(video_url, "bilibili") or video_url
+        audio_path = os.path.join(output_dir, f"{expected_video_id}.mp3")
         output_path = os.path.join(output_dir, "%(id)s.%(ext)s")
 
         ydl_opts = {
@@ -67,26 +82,38 @@ class BilibiliDownloader(Downloader, ABC):
             'format': 'bestaudio[ext=m4a]/bestaudio/best',
             'outtmpl': output_path,
             'http_headers': {'Referer': 'https://www.bilibili.com'},
-            'postprocessors': [
+            'noplaylist': True,
+            'quiet': False,
+        }
+        if not skip_download:
+            ydl_opts['postprocessors'] = [
                 {
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                     'preferredquality': '64',
                 }
-            ],
-            'noplaylist': True,
-            'quiet': False,
-        }
+            ]
+        if skip_download:
+            ydl_opts['skip_download'] = True
         if self._cookiefile:
             ydl_opts['cookiefile'] = self._cookiefile
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            video_id = info.get("id")
-            title = info.get("title")
-            duration = info.get("duration", 0)
-            cover_url = info.get("thumbnail")
-            audio_path = os.path.join(output_dir, f"{video_id}.mp3")
+        with _get_download_lock(expected_video_id):
+            download_file = not skip_download
+            if download_file and os.path.exists(audio_path):
+                logger.info("检测到已下载音频，复用: %s", audio_path)
+                download_file = False
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=download_file)
+                video_id = info.get("id") or expected_video_id
+                title = info.get("title") or video_id
+                duration = info.get("duration", 0)
+                cover_url = info.get("thumbnail")
+                audio_path = os.path.join(output_dir, f"{video_id}.mp3")
+
+            if not skip_download and not os.path.exists(audio_path):
+                raise FileNotFoundError(f"音频文件未找到: {audio_path}")
 
         return AudioDownloadResult(
             file_path=audio_path,

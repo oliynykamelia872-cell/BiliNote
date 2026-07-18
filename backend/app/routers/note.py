@@ -149,7 +149,7 @@ def run_note_task(task_id: str, video_url: str, platform: str, quality: Download
         )
 
     logger.info(f"任务进入执行队列 (task_id={task_id})")
-    note = task_serial_executor.run(_execute_note_task)
+    note = task_serial_executor.run_reserved(task_id, _execute_note_task)
     logger.info(f"Note generated: {task_id}")
     if not note or not note.markdown:
         logger.warning(f"任务 {task_id} 执行失败，跳过保存")
@@ -225,8 +225,14 @@ def generate_note(data: VideoRequest, background_tasks: BackgroundTasks):
             # 正常新建任务
             task_id = str(uuid.uuid4())
 
+        # 同一个任务只能有一个执行实例。重复点击重试时复用正在运行的任务，
+        # 避免多个线程同时覆盖状态文件和 GPT 断点。
+        if not task_serial_executor.reserve(task_id):
+            logger.info(f"任务已在队列或运行中，忽略重复提交 (task_id={task_id})")
+            return R.success({"task_id": task_id, "already_running": True})
+
         # 统一先写入 PENDING，表示已进入队列等待串行执行
-        NoteGenerator()._update_status(task_id, TaskStatus.PENDING)
+        NoteGenerator()._update_status(task_id, TaskStatus.PENDING, message="任务已进入队列")
 
         # 客户端已经抓好字幕的话，写到转写缓存文件，NoteGenerator 的 cache-hit 逻辑会直接用上
         if data.prefetched_transcript:
@@ -277,6 +283,30 @@ def get_task_status(task_id: str):
 
         if status == TaskStatus.FAILED.value:
             return R.error(message or "任务失败", code=500)
+
+        # 总结请求耗时较长时，从断点补充真实进度，避免界面看起来卡死。
+        checkpoint_path = os.path.join(NOTE_OUTPUT_DIR, f"{task_id}_markdown.gpt.checkpoint.json")
+        terminal_statuses = {TaskStatus.SUCCESS.value, TaskStatus.FAILED.value}
+        if status not in terminal_statuses and os.path.exists(checkpoint_path):
+            try:
+                with open(checkpoint_path, "r", encoding="utf-8") as cf:
+                    checkpoint = json.load(cf)
+                phase = checkpoint.get("phase")
+                if phase == "summarize":
+                    completed = len(checkpoint.get("partials") or [])
+                    pending = len(checkpoint.get("pending_chunks") or [])
+                    message = f"正在总结视频内容：已完成 {completed}/{completed + pending} 个分段"
+                    status = TaskStatus.SUMMARIZING.value
+                elif phase == "merge":
+                    merge_state = checkpoint.get("merge_state") or {}
+                    completed = len(merge_state.get("completed_groups") or [])
+                    current = len(merge_state.get("current_partials") or checkpoint.get("partials") or [])
+                    message = f"正在合并 {current} 个分段摘要"
+                    if completed:
+                        message += f"（本轮已完成 {completed} 组）"
+                    status = TaskStatus.SUMMARIZING.value
+            except (OSError, ValueError, TypeError):
+                logger.warning(f"读取 GPT 断点进度失败 (task_id={task_id})", exc_info=True)
 
         # 处理中状态
         return R.success({
