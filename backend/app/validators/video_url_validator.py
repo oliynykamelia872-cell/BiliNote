@@ -8,7 +8,8 @@ SUPPORTED_PLATFORMS = {
     "bilibili": r"(https?://)?(www\.)?bilibili\.com/video/[a-zA-Z0-9]+",
     "youtube": r"(https?://)?(www\.)?(youtube\.com/(watch\?v=|shorts/)|youtu\.be/)[\w\-]+",
     "douyin": "douyin",
-    "kuaishou": "kuaishou"
+    "kuaishou": "kuaishou",
+    "xiaohongshu": "xiaohongshu",
 }
 
 
@@ -20,7 +21,16 @@ def is_supported_video_url(url: str) -> bool:
         return True
 
     for name, pattern in SUPPORTED_PLATFORMS.items():
-        if pattern in ["douyin", "kuaishou"]:
+        if name == "xiaohongshu":
+            hostname = (parsed.hostname or "").lower()
+            if (
+                hostname == "xiaohongshu.com"
+                or hostname.endswith(".xiaohongshu.com")
+                or hostname == "xhslink.com"
+                or hostname.endswith(".xhslink.com")
+            ):
+                return True
+        elif pattern in ["douyin", "kuaishou"]:
             if pattern in url:
                 return True
         else:

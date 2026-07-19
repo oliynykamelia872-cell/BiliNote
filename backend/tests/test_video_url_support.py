@@ -45,6 +45,28 @@ class TestVideoUrlSupport(unittest.TestCase):
 
         self.assertTrue(video_url_validator.is_supported_video_url(url))
 
+    def test_extracts_xiaohongshu_note_id(self):
+        note_id = "6a523217000000002100b841"
+        cases = [
+            f"https://www.xiaohongshu.com/explore/{note_id}?xsec_source=app_share",
+            f"https://www.xiaohongshu.com/discovery/item/{note_id}",
+        ]
+
+        for url in cases:
+            with self.subTest(url=url):
+                self.assertEqual(url_parser.extract_video_id(url, "xiaohongshu"), note_id)
+                self.assertTrue(video_url_validator.is_supported_video_url(url))
+
+    def test_accepts_xiaohongshu_short_link(self):
+        self.assertTrue(video_url_validator.is_supported_video_url("https://xhslink.com/a/example"))
+
+    def test_rejects_xiaohongshu_name_in_unrelated_url(self):
+        self.assertFalse(
+            video_url_validator.is_supported_video_url(
+                "https://example.com/?next=https://www.xiaohongshu.com/explore/6a523217000000002100b841"
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

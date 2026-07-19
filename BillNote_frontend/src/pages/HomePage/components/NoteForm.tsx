@@ -297,7 +297,7 @@ const NoteForm = () => {
           <FormButton></FormButton>
 
           {/* 视频链接 & 平台 */}
-          <SectionHeader title="视频链接" tip="支持 B 站、YouTube 等平台" />
+          <SectionHeader title="视频链接" tip="支持 B 站、YouTube、抖音、快手和小红书" />
           <div className="flex gap-2">
             {/* 平台选择 */}
 

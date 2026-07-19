@@ -8,7 +8,7 @@ def extract_video_id(url: str, platform: str) -> Optional[str]:
     从视频链接中提取视频 ID
 
     :param url: 视频链接
-    :param platform: 平台名（bilibili / youtube / douyin）
+    :param platform: 平台名（bilibili / youtube / douyin / xiaohongshu）
     :return: 提取到的视频 ID 或 None
     """
     if platform == "bilibili":
@@ -31,6 +31,12 @@ def extract_video_id(url: str, platform: str) -> Optional[str]:
         # 匹配 douyin.com/video/1234567890123456789
         match = re.search(r"/video/(\d+)", url)
         return match.group(1) if match else None
+
+    elif platform == "xiaohongshu":
+        if "xhslink.com" in url:
+            url = resolve_xiaohongshu_short_url(url) or url
+        match = re.search(r"/(?:explore|discovery/item)/([0-9a-fA-F]{24})", url)
+        return match.group(1).lower() if match else None
 
     return None
 
@@ -56,6 +62,20 @@ def normalize_video_url(url: str) -> str:
     if p:
         normalized += f"?p={p}"
     return normalized
+
+
+def resolve_xiaohongshu_short_url(short_url: str) -> Optional[str]:
+    try:
+        response = requests.head(
+            short_url,
+            allow_redirects=True,
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        return response.url
+    except requests.RequestException as exc:
+        print(f"Error resolving Xiaohongshu short URL: {exc}")
+        return None
 
 
 def resolve_bilibili_short_url(short_url: str) -> Optional[str]:

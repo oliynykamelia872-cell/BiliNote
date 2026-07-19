@@ -57,10 +57,12 @@ def replace_content_markers(markdown: str, video_id: str, platform: str = 'bilib
             url = f"https://www.douyin.com/video/{video_id}"
             url = f"https://www.douyin.com/video/{safe_video_id}"
             return f"[原片 @ {mm}:{ss}]({url})"
+        elif platform == 'xiaohongshu':
+            url = f"https://www.xiaohongshu.com/explore/{safe_video_id}"
+            return f"[原片 @ {mm}:{ss}]({url})"
         else:
             return f"({mm}:{ss})"
 
         return f"[原片 @ {mm}:{ss}]({url})"
 
     return re.sub(pattern, replacer, markdown)
-

@@ -434,7 +434,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
         <Idle />
         <div className="text-center">
           <p className="text-lg font-bold">输入视频链接并点击"生成笔记"</p>
-          <p className="mt-2 text-xs text-neutral-500">支持哔哩哔哩、YouTube 、抖音等视频平台</p>
+          <p className="mt-2 text-xs text-neutral-500">支持哔哩哔哩、YouTube、抖音、快手和小红书</p>
         </div>
       </div>
     )
@@ -536,7 +536,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
                   <ArrowRight className="text-primary h-8 w-8" />
                 </div>
                 <p className="mb-2 text-neutral-600">输入视频链接并点击"生成笔记"按钮</p>
-                <p className="text-xs text-neutral-500">支持哔哩哔哩、YouTube等视频网站</p>
+                <p className="text-xs text-neutral-500">支持哔哩哔哩、YouTube、抖音、快手和小红书</p>
               </div>
             </div>
           )}

@@ -335,8 +335,12 @@ def get_task_status(task_id: str):
 
 @router.get("/image_proxy")
 async def image_proxy(request: Request, url: str):
+    source_host = (urlparse(url).hostname or "").lower()
+    referer = "https://www.xiaohongshu.com/" if (
+        source_host.endswith("xhscdn.com") or source_host.endswith("xiaohongshu.com")
+    ) else "https://www.bilibili.com/"
     headers = {
-        "Referer": "https://www.bilibili.com/",
+        "Referer": referer,
         "User-Agent": request.headers.get("User-Agent", ""),
     }
 
