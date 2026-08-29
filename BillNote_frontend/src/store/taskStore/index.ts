@@ -1,12 +1,22 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { delete_task, generateNote } from '@/services/note.ts'
+import { cancelTask, delete_task, generateNote } from '@/services/note.ts'
 import { v4 as uuidv4 } from 'uuid'
 import toast from 'react-hot-toast'
 import { get, set, del } from 'idb-keyval'
 
 
-export type TaskStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILD'
+export type TaskStatus =
+  | 'PENDING'
+  | 'PARSING'
+  | 'DOWNLOADING'
+  | 'TRANSCRIBING'
+  | 'SUMMARIZING'
+  | 'FORMATTING'
+  | 'SAVING'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'CANCELLED'
 
 export interface AudioMeta {
   cover_url: string
@@ -38,12 +48,20 @@ export interface Markdown {
   created_at: string
 }
 
+export interface ConversionMeta {
+  engine: string
+  assets: string[]
+  warnings: string[]
+  failed_files: Array<{ file: string; reason: string }>
+}
+
 export interface Task {
   id: string
   markdown: string|Markdown [] //为了兼容之前的笔记
   transcript: Transcript
   status: TaskStatus
   audioMeta: AudioMeta
+  conversionMeta?: ConversionMeta
   createdAt: string
   formData: {
     video_url: string
@@ -59,13 +77,14 @@ export interface Task {
 interface TaskStore {
   tasks: Task[]
   currentTaskId: string | null
-  addPendingTask: (taskId: string, platform: string) => void
+  addPendingTask: (taskId: string, platform: string, formData: any) => void
   updateTaskContent: (id: string, data: Partial<Omit<Task, 'id' | 'createdAt'>>) => void
   removeTask: (id: string) => void
   clearTasks: () => void
   setCurrentTask: (taskId: string | null) => void
   getCurrentTask: () => Task | null
   retryTask: (id: string) => void
+  cancelTask: (id: string) => Promise<void>
 }
 
 export const useTaskStore = create<TaskStore>()(
@@ -97,7 +116,7 @@ export const useTaskStore = create<TaskStore>()(
                 file_path: '',
                 platform: '',
                 raw_info: null,
-                title: '',
+                title: formData?.document_name || '',
                 video_id: '',
               },
             },
@@ -200,6 +219,23 @@ export const useTaskStore = create<TaskStore>()(
                   : t
           ),
         }))
+      },
+
+      cancelTask: async (id: string) => {
+        const task = get().tasks.find(item => item.id === id)
+        if (!task || ['SUCCESS', 'FAILED', 'CANCELLED'].includes(task.status)) return
+        try {
+          await cancelTask(id)
+          set(state => ({
+            tasks: state.tasks.map(item =>
+              item.id === id ? { ...item, status: 'CANCELLED' } : item
+            ),
+          }))
+          toast.success('任务停止请求已提交')
+        } catch (error) {
+          toast.error('停止任务失败')
+          throw error
+        }
       },
 
 

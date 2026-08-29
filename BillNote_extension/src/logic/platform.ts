@@ -8,6 +8,10 @@ export function detectPlatform(url: string | undefined | null): Platform | null 
     return 'bilibili'
   if (/(youtube\.com\/watch|youtu\.be\/)/.test(url))
     return 'youtube'
+  if (/(xiaohongshu\.com|xhslink\.com)/.test(url))
+    return 'xiaohongshu'
+  if (/(weixin\.qq\.com\/sph\/|channels\.weixin\.qq\.com\/finder-preview\/)/.test(url))
+    return 'wechat_channels'
   if (url.includes('douyin'))
     return 'douyin'
   if (url.includes('kuaishou'))
@@ -20,5 +24,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   youtube: 'YouTube',
   douyin: '抖音',
   kuaishou: '快手',
+  xiaohongshu: '小红书',
+  wechat_channels: '微信视频号',
   local: '本地',
 }

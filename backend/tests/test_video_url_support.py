@@ -67,6 +67,17 @@ class TestVideoUrlSupport(unittest.TestCase):
             )
         )
 
+    def test_accepts_wechat_channels_links(self):
+        cases = [
+            "https://weixin.qq.com/sph/ArWtRAQJv7",
+            "https://channels.weixin.qq.com/finder-preview/pages/sph?id=ArWtRAQJv7",
+        ]
+
+        for url in cases:
+            with self.subTest(url=url):
+                self.assertEqual(url_parser.extract_video_id(url, "wechat_channels"), "ArWtRAQJv7")
+                self.assertTrue(video_url_validator.is_supported_video_url(url))
+
 
 if __name__ == "__main__":
     unittest.main()

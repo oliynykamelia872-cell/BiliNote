@@ -4,7 +4,7 @@ import NoteForm from '@/pages/HomePage/components/NoteForm.tsx'
 import MarkdownViewer from '@/pages/HomePage/components/MarkdownViewer.tsx'
 import { useTaskStore } from '@/store/taskStore'
 import History from '@/pages/HomePage/components/History.tsx'
-type ViewStatus = 'idle' | 'loading' | 'success' | 'failed'
+type ViewStatus = 'idle' | 'loading' | 'success' | 'failed' | 'cancelled'
 export const HomePage: FC = () => {
   const tasks = useTaskStore(state => state.tasks)
   const currentTaskId = useTaskStore(state => state.currentTaskId)
@@ -22,6 +22,8 @@ export const HomePage: FC = () => {
       setStatus('success')
     } else if (currentTask.status === 'FAILED') {
       setStatus('failed')
+    } else if (currentTask.status === 'CANCELLED') {
+      setStatus('cancelled')
     } else {
       // PENDING、PARSING、DOWNLOADING、TRANSCRIBING、SUMMARIZING 等所有进行中状态
       setStatus('loading')

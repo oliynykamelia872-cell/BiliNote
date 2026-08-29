@@ -41,6 +41,26 @@ export const generateNote = async (data: {
   }
 }
 
+export const convertDocument = async (formData: FormData) => {
+  try {
+    const response = await request.post('/convert_document', formData)
+    toast.success('文档转换任务已提交！')
+    return response
+  } catch (error) {
+    console.error('文档转换请求失败', error)
+    throw error
+  }
+}
+
+export const cancelTask = async (taskId: string) => {
+  try {
+    return await request.post(`/cancel_task/${taskId}`)
+  } catch (error) {
+    console.error('停止任务请求失败', error)
+    throw error
+  }
+}
+
 export const delete_task = async ({ video_id, platform }) => {
   try {
     const data = {

@@ -2,7 +2,7 @@ import { useTaskStore } from '@/store/taskStore'
 import { ScrollArea } from '@/components/ui/scroll-area.tsx'
 import { Badge } from '@/components/ui/badge.tsx'
 import { cn } from '@/lib/utils.ts'
-import { Trash } from 'lucide-react'
+import { Square, Trash } from 'lucide-react'
 import { Button } from '@/components/ui/button.tsx'
 import PinyinMatch from 'pinyin-match'
 import Fuse from 'fuse.js'
@@ -24,6 +24,7 @@ interface NoteHistoryProps {
 const NoteHistory: FC<NoteHistoryProps> = ({ onSelect, selectedId }) => {
   const tasks = useTaskStore(state => state.tasks)
   const removeTask = useTaskStore(state => state.removeTask)
+  const cancelTask = useTaskStore(state => state.cancelTask)
   // 确保baseURL没有尾部斜杠
   const baseURL = (String(import.meta.env.VITE_API_BASE_URL || 'api')).replace(/\/$/, '')
   const [rawSearch, setRawSearch] = useState('')
@@ -133,7 +134,7 @@ const NoteHistory: FC<NoteHistoryProps> = ({ onSelect, selectedId }) => {
                     已完成
                   </div>
                 )}
-                {task.status !== 'SUCCESS' && task.status !== 'FAILED' ? (
+                {!['SUCCESS', 'FAILED', 'CANCELLED'].includes(task.status) ? (
                   <div className={'w-10 rounded bg-green-500 p-0.5 text-center text-white'}>
                     等待中
                   </div>
@@ -143,9 +144,24 @@ const NoteHistory: FC<NoteHistoryProps> = ({ onSelect, selectedId }) => {
                 {task.status === 'FAILED' && (
                   <div className={'w-10 rounded bg-red-500 p-0.5 text-center text-white'}>失败</div>
                 )}
+                {task.status === 'CANCELLED' && (
+                  <div className={'w-10 rounded bg-neutral-500 p-0.5 text-center text-white'}>已停止</div>
+                )}
               </div>
 
               <div>
+                {!['SUCCESS', 'FAILED', 'CANCELLED'].includes(task.status) && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button type="button" size="small" variant="ghost" onClick={e => { e.stopPropagation(); cancelTask(task.id) }} className="shrink-0">
+                          <Square className="text-muted-foreground h-4 w-4 fill-current" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>停止任务</p></TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>

@@ -12,6 +12,7 @@ const platformLabel: Record<string, string> = {
   youtube: 'YouTube',
   douyin: '抖音',
   xiaohongshu: '小红书',
+  wechat_channels: '微信视频号',
 }
 
 export default function VideoBanner({ audioMeta, videoUrl }: VideoBannerProps) {

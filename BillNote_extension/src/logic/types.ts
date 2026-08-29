@@ -1,5 +1,5 @@
 // 与 backend/app/routers/note.py / provider.py / model.py 对齐
-export type Platform = 'bilibili' | 'youtube' | 'douyin' | 'kuaishou' | 'local'
+export type Platform = 'bilibili' | 'youtube' | 'douyin' | 'kuaishou' | 'xiaohongshu' | 'wechat_channels' | 'local'
 export type Quality = 'fast' | 'medium' | 'slow'
 
 export type TaskStatus =
@@ -182,4 +182,3 @@ export interface DeployStatus {
   whisper: { model_size: string, transcriber_type: string }
   ffmpeg: { available: boolean }
 }
-

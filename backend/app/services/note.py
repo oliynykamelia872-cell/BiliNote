@@ -36,6 +36,7 @@ from app.utils.screenshot_marker import extract_screenshot_timestamps
 from app.utils.status_code import StatusCode
 from app.utils.video_helper import generate_screenshot
 from app.utils.video_reader import VideoReader
+from app.services.task_serial_executor import TaskCancelledError, task_serial_executor
 
 # ------------------ 环境变量与全局配置 ------------------
 
@@ -59,6 +60,49 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+def update_task_status(task_id: Optional[str], status: Union[str, TaskStatus], message: Optional[str] = None):
+    """
+    创建或更新 {task_id}.status.json，记录当前任务状态。
+    不依赖 NoteGenerator 实例，避免为了写队列状态而提前初始化转写模型。
+    """
+    if not task_id:
+        return
+
+    NOTE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    status_file = NOTE_OUTPUT_DIR / f"{task_id}.status.json"
+    print(f"写入状态文件: {status_file} 当前状态: {status}")
+    data = {"status": status.value if isinstance(status, TaskStatus) else status}
+    if message:
+        data["message"] = message
+
+    try:
+        # A stop request is terminal for this execution. Do not let a blocking
+        # operation that finishes later overwrite it with an intermediate state.
+        if status_file.exists() and data["status"] != TaskStatus.PENDING.value:
+            existing = json.loads(status_file.read_text(encoding="utf-8"))
+            if existing.get("status") == TaskStatus.CANCELLED.value and data["status"] != TaskStatus.CANCELLED.value:
+                return
+        # First create a temporary file
+        temp_file = status_file.with_suffix('.tmp')
+
+        # Write to temporary file
+        with temp_file.open('w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        # Atomic rename operation
+        temp_file.replace(status_file)
+
+        print(f"状态文件写入成功: {status_file}")
+    except Exception as e:
+        logger.error(f"写入状态文件失败 (task_id={task_id})：{e}")
+        # Try to write error to file directly as fallback
+        try:
+            with status_file.open('w', encoding='utf-8') as f:
+                f.write(f"Error writing status: {str(e)}")
+        except Exception:
+            logger.error(f"写入错误  {e}")
+
+
 class NoteGenerator:
     """
     NoteGenerator 用于执行视频/音频下载、转写、GPT 生成笔记、插入截图/链接、
@@ -71,7 +115,7 @@ class NoteGenerator:
         self.model_size: str = config_manager.get_whisper_model_size()
         self.device: Optional[str] = None
         self.transcriber_type: str = config_manager.get_transcriber_type()
-        self.transcriber: Transcriber = self._init_transcriber()
+        self.transcriber: Optional[Transcriber] = None
         self.video_path: Optional[Path] = None
         self.video_img_urls=[]
         logger.info("NoteGenerator 初始化完成")
@@ -122,12 +166,14 @@ class NoteGenerator:
 
         try:
             logger.info(f"开始生成笔记 (task_id={task_id})")
+            task_serial_executor.raise_if_cancelled(task_id)
             self._update_status(task_id, TaskStatus.PARSING)
 
             # 获取下载器与 GPT 实例
 
             downloader = self._get_downloader(platform)
             gpt = self._get_gpt(model_name, provider_id)
+            task_serial_executor.raise_if_cancelled(task_id)
 
             # 缓存文件路径
             audio_cache_file = NOTE_OUTPUT_DIR / f"{task_id}_audio.json"
@@ -169,6 +215,8 @@ class NoteGenerator:
                     logger.warning(f"获取平台字幕失败: {e}，将下载音频后转写")
                     transcript = None
 
+            task_serial_executor.raise_if_cancelled(task_id)
+
             # 2. 下载音频/视频
             # 有字幕时只提取元信息，不下载音视频文件（除非需要截图/视频理解）
             has_transcript = transcript is not None
@@ -187,6 +235,7 @@ class NoteGenerator:
                 grid_size=grid_size,
                 skip_download=not need_full_download,
             )
+            task_serial_executor.raise_if_cancelled(task_id)
 
             # 3. 如果前面没拿到字幕，走转写流程
             if transcript is None:
@@ -198,6 +247,7 @@ class NoteGenerator:
                     status_phase=TaskStatus.TRANSCRIBING,
                     task_id=task_id,
                 )
+                task_serial_executor.raise_if_cancelled(task_id)
 
             # 3. GPT 总结
             markdown = self._summarize_text(
@@ -212,6 +262,7 @@ class NoteGenerator:
                 extras=extras,
                 video_img_urls=self.video_img_urls,
             )
+            task_serial_executor.raise_if_cancelled(task_id)
 
             # 4. 截图 & 链接替换
             if _format:
@@ -222,11 +273,13 @@ class NoteGenerator:
                     audio_meta=audio_meta,
                     platform=platform,
                 )
+                task_serial_executor.raise_if_cancelled(task_id)
 
             markdown = prepend_source_link(markdown, str(video_url))
 
             # 5. 保存记录到数据库
             self._update_status(task_id, TaskStatus.SAVING)
+            task_serial_executor.raise_if_cancelled(task_id)
             self._save_metadata(video_id=audio_meta.video_id, platform=platform, task_id=task_id)
 
             # 6. 完成
@@ -234,6 +287,9 @@ class NoteGenerator:
             logger.info(f"笔记生成成功 (task_id={task_id})")
             return NoteResult(markdown=markdown, transcript=transcript, audio_meta=audio_meta)
 
+        except TaskCancelledError:
+            self._update_status(task_id, TaskStatus.CANCELLED, message="任务已停止")
+            raise
         except Exception as exc:
             logger.error(f"生成笔记流程异常 (task_id={task_id})：{exc}", exc_info=True)
             self._update_status(task_id, TaskStatus.FAILED, message=str(exc))
@@ -319,36 +375,7 @@ class NoteGenerator:
         :param status: TaskStatus 枚举或自定义状态字符串
         :param message: 可选消息，用于记录失败原因等
         """
-        if not task_id:
-            return
-
-        NOTE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        status_file = NOTE_OUTPUT_DIR / f"{task_id}.status.json"
-        print(f"写入状态文件: {status_file} 当前状态: {status}")
-        data = {"status": status.value if isinstance(status, TaskStatus) else status}
-        if message:
-            data["message"] = message
-
-        try:
-            # First create a temporary file
-            temp_file = status_file.with_suffix('.tmp')
-
-            # Write to temporary file
-            with temp_file.open('w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-
-            # Atomic rename operation
-            temp_file.replace(status_file)
-
-            print(f"状态文件写入成功: {status_file}")
-        except Exception as e:
-            logger.error(f"写入状态文件失败 (task_id={task_id})：{e}")
-            # Try to write error to file directly as fallback
-            try:
-                with status_file.open('w', encoding='utf-8') as f:
-                    f.write(f"Error writing status: {str(e)}")
-            except:
-                logger.error(f"写入错误  {e}")
+        update_task_status(task_id, status, message)
 
     def _handle_exception(self, task_id, exc):
         logger.error(f"任务异常 (task_id={task_id})", exc_info=True)
@@ -559,6 +586,8 @@ class NoteGenerator:
         # 调用转写器
         try:
             logger.info("开始转写音频")
+            if self.transcriber is None:
+                self.transcriber = self._init_transcriber()
             transcript = self.transcriber.transcript(file_path=audio_file)
             transcript_cache_file.write_text(json.dumps(asdict(transcript), ensure_ascii=False, indent=2), encoding="utf-8")
             logger.info(f"转写并缓存成功 ({transcript_cache_file})")
@@ -596,6 +625,7 @@ class NoteGenerator:
         :return: 生成的 Markdown 字符串
         """
         task_id = markdown_cache_file.stem
+        task_serial_executor.raise_if_cancelled(task_id)
         self._update_status(task_id, TaskStatus.SUMMARIZING)
 
         source = GPTSource(
@@ -613,9 +643,12 @@ class NoteGenerator:
 
         try:
             markdown = gpt.summarize(source)
+            task_serial_executor.raise_if_cancelled(task_id)
             markdown_cache_file.write_text(markdown, encoding="utf-8")
             logger.info(f"GPT 总结并缓存成功 ({markdown_cache_file})")
             return markdown
+        except TaskCancelledError:
+            raise
         except Exception as exc:
             logger.error(f"GPT 总结失败：{exc}")
             self._handle_exception(task_id, exc)

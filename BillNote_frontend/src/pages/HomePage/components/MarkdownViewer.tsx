@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, memo, FC } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Button } from '@/components/ui/button.tsx'
-import { Copy, Download, ArrowRight, Play, ExternalLink } from 'lucide-react'
+import { Copy, Download, ArrowRight, Play, ExternalLink, Square } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import Error from '@/components/Lottie/error.tsx'
 import Loading from '@/components/Lottie/Loading.tsx'
@@ -36,7 +36,7 @@ interface VersionNote {
 
 interface MarkdownViewerProps {
   content: string | VersionNote[]
-  status: 'idle' | 'loading' | 'success' | 'failed'
+  status: 'idle' | 'loading' | 'success' | 'failed' | 'cancelled'
 }
 
 const steps = [
@@ -326,6 +326,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
   const currentTask = useTaskStore(state => state.getCurrentTask())
   const taskStatus = currentTask?.status || 'PENDING'
   const retryTask = useTaskStore.getState().retryTask
+  const cancelTask = useTaskStore(state => state.cancelTask)
   const isMultiVersion = Array.isArray(currentTask?.markdown)
   const [showTranscribe, setShowTranscribe] = useState(false)
   const [showChat, setShowChat] = useState<false | 'half' | 'full'>(false)
@@ -423,6 +424,10 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
         <div className="text-center text-sm">
           <p className="text-lg font-bold">正在生成笔记，请稍候…</p>
           <p className="mt-2 text-xs text-neutral-500">这可能需要几秒钟时间，取决于视频长度</p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => currentTask && cancelTask(currentTask.id)}>
+            <Square className="mr-2 h-4 w-4 fill-current" />
+            停止任务
+          </Button>
         </div>
       </div>
     )
@@ -456,6 +461,18 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
     )
   }
 
+  if (status === 'cancelled') {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center gap-4 space-y-3 text-neutral-500">
+        <Idle />
+        <div className="text-center">
+          <p className="text-lg font-bold">任务已停止</p>
+          <p className="mt-2 text-xs">已停止后不会继续保存或生成笔记。</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden">
       <MarkdownHeader
@@ -471,6 +488,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
         createAt={createTime}
         showTranscribe={showTranscribe}
         setShowTranscribe={setShowTranscribe}
+        showTranscriptControl={currentTask?.audioMeta?.platform !== 'document'}
         showChat={showChat}
         setShowChat={setShowChat}
         viewMode={viewMode}
@@ -500,12 +518,25 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
               <>
               <ScrollArea className="min-w-0 flex-1">
                 <div className="px-2">
-                  <VideoBanner
-                    audioMeta={currentTask?.audioMeta}
-                    videoUrl={currentTask?.formData?.video_url}
-                  />
+                  {currentTask?.audioMeta?.platform !== 'document' && (
+                    <VideoBanner
+                      audioMeta={currentTask?.audioMeta}
+                      videoUrl={currentTask?.formData?.video_url}
+                    />
+                  )}
                 </div>
                 <div className={'markdown-body w-full px-2'}>
+                  {currentTask?.conversionMeta?.warnings?.length > 0 && (
+                    <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                      {currentTask.conversionMeta.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
+                    </div>
+                  )}
+                  {currentTask?.conversionMeta?.failed_files?.length > 0 && (
+                    <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                      <p>部分文件未转换：</p>
+                      {currentTask.conversionMeta.failed_files.map(item => <p key={item.file}>{item.file}: {item.reason}</p>)}
+                    </div>
+                  )}
                   <ReactMarkdown
                     remarkPlugins={remarkPlugins}
                     rehypePlugins={rehypePlugins}

@@ -10,6 +10,7 @@ SUPPORTED_PLATFORMS = {
     "douyin": "douyin",
     "kuaishou": "kuaishou",
     "xiaohongshu": "xiaohongshu",
+    "wechat_channels": "wechat_channels",
 }
 
 
@@ -26,9 +27,18 @@ def is_supported_video_url(url: str) -> bool:
             if (
                 hostname == "xiaohongshu.com"
                 or hostname.endswith(".xiaohongshu.com")
-                or hostname == "xhslink.com"
-                or hostname.endswith(".xhslink.com")
+                or hostname in {"xhslink.cn", "xhslink.com"}
+                or hostname.endswith((".xhslink.cn", ".xhslink.com"))
             ):
+                return True
+        elif name == "wechat_channels":
+            hostname = (parsed.hostname or "").lower()
+            if (
+                hostname == "weixin.qq.com"
+                or hostname.endswith(".weixin.qq.com")
+                or hostname == "channels.weixin.qq.com"
+                or hostname.endswith(".channels.weixin.qq.com")
+            ) and ("/sph/" in parsed.path or "/finder-preview/" in parsed.path):
                 return True
         elif pattern in ["douyin", "kuaishou"]:
             if pattern in url:

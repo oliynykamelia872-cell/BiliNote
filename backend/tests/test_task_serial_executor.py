@@ -13,6 +13,7 @@ if spec is None or spec.loader is None:
 task_serial_executor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(task_serial_executor)
 SerialTaskExecutor = task_serial_executor.SerialTaskExecutor
+TaskCancelledError = task_serial_executor.TaskCancelledError
 
 
 class TestTaskSerialExecutor(unittest.TestCase):
@@ -69,6 +70,20 @@ class TestTaskSerialExecutor(unittest.TestCase):
             executor.run_reserved("task-1", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
 
         self.assertFalse(executor.is_active("task-1"))
+        executor.shutdown()
+
+    def test_cancel_request_is_observed_at_checkpoint(self):
+        executor = SerialTaskExecutor(max_workers=1)
+        self.assertTrue(executor.reserve("task-1"))
+        self.assertTrue(executor.request_cancel("task-1"))
+        self.assertTrue(executor.is_cancelled("task-1"))
+        with self.assertRaises(TaskCancelledError):
+            executor.raise_if_cancelled("task-1")
+        executor.shutdown()
+
+    def test_cannot_cancel_unreserved_task(self):
+        executor = SerialTaskExecutor(max_workers=1)
+        self.assertFalse(executor.request_cancel("missing-task"))
         executor.shutdown()
 
 

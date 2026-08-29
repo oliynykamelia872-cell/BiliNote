@@ -14,8 +14,9 @@ from app.db.video_task_dao import get_task_by_video
 from app.enmus.exception import NoteErrorEnum
 from app.enmus.note_enums import DownloadQuality
 from app.exceptions.note import NoteError
-from app.services.note import NoteGenerator, logger
-from app.services.task_serial_executor import task_serial_executor
+from app.services.note import NoteGenerator, logger, update_task_status
+from app.services.document_converter import DocumentConverter, DocumentConversionError
+from app.services.task_serial_executor import TaskCancelledError, task_serial_executor
 from app.utils.response import ResponseWrapper as R
 from app.utils.url_parser import extract_video_id, normalize_video_url
 from app.validators.video_url_validator import is_supported_video_url
@@ -79,6 +80,8 @@ class VideoRequest(BaseModel):
 
 NOTE_OUTPUT_DIR = os.getenv("NOTE_OUTPUT_DIR", "note_results")
 UPLOAD_DIR = "uploads"
+DOCUMENT_UPLOAD_DIR = Path(UPLOAD_DIR) / "documents"
+MAX_DOCUMENT_SIZE = 50 * 1024 * 1024
 
 
 def save_note_to_file(task_id: str, note):
@@ -128,7 +131,8 @@ def run_note_task(task_id: str, video_url: str, platform: str, quality: Download
                   ):
 
     if not model_name or not provider_id:
-        raise HTTPException(status_code=400, detail="请选择模型和提供者")
+        update_task_status(task_id, TaskStatus.FAILED, message="请选择模型和提供者")
+        return
 
     def _execute_note_task():
         return NoteGenerator().generate(
@@ -149,7 +153,18 @@ def run_note_task(task_id: str, video_url: str, platform: str, quality: Download
         )
 
     logger.info(f"任务进入执行队列 (task_id={task_id})")
-    note = task_serial_executor.run_reserved(task_id, _execute_note_task)
+    try:
+        note = task_serial_executor.run_reserved(task_id, _execute_note_task)
+    except TaskCancelledError:
+        update_task_status(task_id, TaskStatus.CANCELLED, message="任务已停止")
+        return
+    except Exception as exc:
+        logger.exception(f"后台任务执行异常 (task_id={task_id})")
+        update_task_status(task_id, TaskStatus.FAILED, message=str(exc))
+        return
+    if task_serial_executor.is_cancelled(task_id):
+        update_task_status(task_id, TaskStatus.CANCELLED, message="任务已停止")
+        return
     logger.info(f"Note generated: {task_id}")
     if not note or not note.markdown:
         logger.warning(f"任务 {task_id} 执行失败，跳过保存")
@@ -184,6 +199,122 @@ async def upload(file: UploadFile = File(...)):
 
     # 假设你静态目录挂载了 /uploads
     return R.success({"url": f"/uploads/{file.filename}"})
+
+
+def _save_document_result(task_id: str, filename: str, conversion) -> None:
+    os.makedirs(NOTE_OUTPUT_DIR, exist_ok=True)
+    result = {
+        "markdown": conversion.markdown,
+        "transcript": {"full_text": "", "language": "", "raw": None, "segments": []},
+        "audio_meta": {
+            "file_path": "", "title": filename, "duration": 0, "cover_url": None,
+            "platform": "document", "video_id": task_id, "raw_info": {"document": True},
+        },
+        "conversion_meta": {
+            "engine": "markitdown",
+            "assets": conversion.assets,
+            "warnings": conversion.warnings,
+            "failed_files": conversion.failed_files,
+        },
+    }
+    with open(os.path.join(NOTE_OUTPUT_DIR, f"{task_id}.json"), "w", encoding="utf-8") as result_file:
+        json.dump(result, result_file, ensure_ascii=False, indent=2)
+
+
+def run_document_task(task_id: str, source_path: str, filename: str, ocr_mode: str,
+                      model_name: Optional[str], provider_id: Optional[str]) -> None:
+    def convert():
+        task_serial_executor.raise_if_cancelled(task_id)
+        update_task_status(task_id, TaskStatus.PARSING, "正在解析文档")
+        converter = DocumentConverter(task_id, Path(source_path), ocr_mode, model_name, provider_id)
+        conversion = converter.convert()
+        task_serial_executor.raise_if_cancelled(task_id)
+        update_task_status(task_id, TaskStatus.SAVING, "正在保存 Markdown 和图片")
+        _save_document_result(task_id, filename, conversion)
+
+    try:
+        task_serial_executor.run_reserved(task_id, convert)
+        task_serial_executor.raise_if_cancelled(task_id)
+        update_task_status(task_id, TaskStatus.SUCCESS, "文档转换完成")
+    except TaskCancelledError:
+        update_task_status(task_id, TaskStatus.CANCELLED, "任务已停止")
+    except Exception as exc:
+        logger.exception("文档转换失败 (task_id=%s)", task_id)
+        update_task_status(task_id, TaskStatus.FAILED, str(exc))
+
+
+@router.post("/convert_document")
+async def convert_document(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    ocr_mode: str = "offline_first",
+    model_name: Optional[str] = None,
+    provider_id: Optional[str] = None,
+):
+    original_name = Path(file.filename or "").name
+    extension = Path(original_name).suffix.lower()
+    if not original_name or extension not in DocumentConverter.supported_extensions:
+        return R.error("不支持的文件格式，请上传受支持的本地文档、数据、图片或 ZIP 文件", code=400)
+    if ocr_mode not in {"offline_first", "offline_only", "visual_fallback", "off"}:
+        return R.error("无效的 OCR 策略", code=400)
+    if ocr_mode == "visual_fallback" and (not model_name or not provider_id):
+        return R.error("视觉模型 OCR 需要选择模型和提供者", code=400)
+
+    task_id = str(uuid.uuid4())
+    upload_dir = DOCUMENT_UPLOAD_DIR / task_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    source_path = upload_dir / f"source{extension}"
+    total_size = 0
+    try:
+        with source_path.open("wb") as target:
+            while chunk := await file.read(1024 * 1024):
+                total_size += len(chunk)
+                if total_size > MAX_DOCUMENT_SIZE:
+                    raise DocumentConversionError("文件不能超过 50MB")
+                target.write(chunk)
+    except DocumentConversionError as exc:
+        source_path.unlink(missing_ok=True)
+        return R.error(str(exc), code=400)
+    finally:
+        await file.close()
+    if total_size == 0:
+        source_path.unlink(missing_ok=True)
+        return R.error("不能上传空文件", code=400)
+    try:
+        DocumentConverter.validate_source(source_path)
+    except DocumentConversionError as exc:
+        source_path.unlink(missing_ok=True)
+        return R.error(str(exc), code=400)
+
+    if not task_serial_executor.reserve(task_id):
+        return R.error("任务创建失败，请重试", code=500)
+    update_task_status(task_id, TaskStatus.PENDING, "文档已进入转换队列")
+    background_tasks.add_task(run_document_task, task_id, str(source_path), original_name, ocr_mode, model_name, provider_id)
+    return R.success({"task_id": task_id})
+
+
+@router.post("/cancel_task/{task_id}")
+def cancel_task(task_id: str):
+    """Request cancellation for a queued or running conversion task."""
+    try:
+        uuid.UUID(task_id)
+    except ValueError:
+        return R.error("无效的任务 ID", code=400)
+
+    status_path = Path(NOTE_OUTPUT_DIR) / f"{task_id}.status.json"
+    if not status_path.exists():
+        return R.error("任务不存在", code=404)
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8")).get("status")
+    except (OSError, ValueError):
+        return R.error("无法读取任务状态", code=500)
+    if status in {TaskStatus.SUCCESS.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value}:
+        return R.error("任务已结束，无法停止", code=409)
+    if not task_serial_executor.request_cancel(task_id):
+        return R.error("任务已结束，无法停止", code=409)
+
+    update_task_status(task_id, TaskStatus.CANCELLED, "正在停止任务，当前步骤结束后生效")
+    return R.success({"task_id": task_id, "status": TaskStatus.CANCELLED.value}, msg="已请求停止任务")
 
 
 @router.post("/generate_note")
@@ -232,7 +363,7 @@ def generate_note(data: VideoRequest, background_tasks: BackgroundTasks):
             return R.success({"task_id": task_id, "already_running": True})
 
         # 统一先写入 PENDING，表示已进入队列等待串行执行
-        NoteGenerator()._update_status(task_id, TaskStatus.PENDING, message="任务已进入队列")
+        update_task_status(task_id, TaskStatus.PENDING, message="任务已进入队列")
 
         # 客户端已经抓好字幕的话，写到转写缓存文件，NoteGenerator 的 cache-hit 逻辑会直接用上
         if data.prefetched_transcript:

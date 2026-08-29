@@ -4,6 +4,7 @@ import {
   DouyinLogo,
   KuaishouLogo,
   LocalLogo,
+  WechatChannelsLogo,
   XiaohongshuLogo,
   YoutubeLogo,
 } from '@/components/Icons/platform.tsx'
@@ -33,5 +34,6 @@ export const videoPlatforms = [
   { label: '抖音', value: 'douyin', logo: DouyinLogo },
   { label: '快手', value: 'kuaishou', logo: KuaishouLogo },
   { label: '小红书', value: 'xiaohongshu', logo: XiaohongshuLogo },
+  { label: '微信视频号', value: 'wechat_channels', logo: WechatChannelsLogo },
   { label: '本地视频', value: 'local', logo: LocalLogo },
 ] as const

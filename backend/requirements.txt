@@ -55,6 +55,7 @@ kombu==5.5.2
 lxml==5.4.0
 macholib==1.16.3
 Markdown==3.8
+markitdown[docx,pdf,pptx,xls,xlsx,outlook]==0.1.7
 markdown-it-py==3.0.0
 markdown_pdf==1.7
 MarkupSafe==3.0.2
@@ -65,6 +66,7 @@ multidict==6.4.3
 networkx==3.3
 numpy==2.2.4
 onnxruntime==1.21.0
+rapidocr-onnxruntime==1.4.4
 openai==1.70.0
 orjson==3.10.16
 packaging==24.2

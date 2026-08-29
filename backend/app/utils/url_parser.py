@@ -8,7 +8,7 @@ def extract_video_id(url: str, platform: str) -> Optional[str]:
     从视频链接中提取视频 ID
 
     :param url: 视频链接
-    :param platform: 平台名（bilibili / youtube / douyin / xiaohongshu）
+    :param platform: 平台名（bilibili / youtube / douyin / xiaohongshu / wechat_channels）
     :return: 提取到的视频 ID 或 None
     """
     if platform == "bilibili":
@@ -33,10 +33,17 @@ def extract_video_id(url: str, platform: str) -> Optional[str]:
         return match.group(1) if match else None
 
     elif platform == "xiaohongshu":
-        if "xhslink.com" in url:
+        if "xhslink.cn" in url or "xhslink.com" in url:
             url = resolve_xiaohongshu_short_url(url) or url
         match = re.search(r"/(?:explore|discovery/item)/([0-9a-fA-F]{24})", url)
         return match.group(1).lower() if match else None
+
+    elif platform == "wechat_channels":
+        match = re.search(r"/sph/([0-9A-Za-z_-]+)", url)
+        if match:
+            return match.group(1)
+        match = re.search(r"[?&]id=([0-9A-Za-z_-]+)", url)
+        return match.group(1) if match else None
 
     return None
 

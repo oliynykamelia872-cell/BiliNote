@@ -17,6 +17,29 @@ export const XiaohongshuLogo = () => {
   )
 }
 
+export const WechatChannelsLogo = () => {
+  return (
+    <svg
+      className="icon"
+      viewBox="0 0 1024 1024"
+      xmlns="http://www.w3.org/2000/svg"
+      width="200"
+      height="200"
+      aria-hidden="true"
+    >
+      <rect width="1024" height="1024" rx="180" fill="#19C15F" />
+      <path
+        d="M512 220c-161.3 0-292 103.1-292 230.4 0 72.8 43.8 139.8 116.3 183.2l-22.8 91.1 105.6-52.8c29.3 6 60.4 8.9 92.9 8.9 161.3 0 292-103.1 292-230.4S673.3 220 512 220z"
+        fill="#FFFFFF"
+      />
+      <path
+        d="M410 438a42 42 0 1 1-84 0 42 42 0 0 1 84 0zm288 0a42 42 0 1 1-84 0 42 42 0 0 1 84 0zM472 396l132 82-132 82V396z"
+        fill="#19C15F"
+      />
+    </svg>
+  )
+}
+
 export const KuaishouLogo = () => {
   return (
     <svg

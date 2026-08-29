@@ -10,6 +10,8 @@ const colorMap: Record<Platform, string> = {
   youtube: 'bg-red-100 text-red-700',
   douyin: 'bg-zinc-200 text-zinc-800',
   kuaishou: 'bg-orange-100 text-orange-700',
+  xiaohongshu: 'bg-rose-100 text-rose-700',
+  wechat_channels: 'bg-green-100 text-green-700',
   local: 'bg-gray-100 text-gray-600',
 }
 

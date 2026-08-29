@@ -28,6 +28,7 @@ interface NoteHeaderProps {
   onDownload: () => void
   createAt?: string | Date
   setShowTranscribe: (show: boolean) => void
+  showTranscriptControl?: boolean
   showChat?: false | 'half' | 'full'
   setShowChat?: (mode: false | 'half' | 'full') => void
 }
@@ -45,6 +46,7 @@ export function MarkdownHeader({
   createAt,
   showTranscribe,
   setShowTranscribe,
+  showTranscriptControl = true,
   showChat,
   setShowChat,
   viewMode,
@@ -169,7 +171,7 @@ export function MarkdownHeader({
             <TooltipContent>下载为 Markdown 文件</TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <TooltipProvider>
+        {showTranscriptControl && <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -186,7 +188,7 @@ export function MarkdownHeader({
             </TooltipTrigger>
             <TooltipContent>原文参照</TooltipContent>
           </Tooltip>
-        </TooltipProvider>
+        </TooltipProvider>}
         {setShowChat && (
           <TooltipProvider>
             <Tooltip>

@@ -8,13 +8,13 @@ import {
   FormMessage,
 } from '@/components/ui/form.tsx'
 import { useEffect,useState } from 'react'
-import { useForm, useWatch } from 'react-hook-form'
+import { FieldErrors, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
-import { Info, Loader2, Plus } from 'lucide-react'
+import { FileText, Info, Loader2, Plus, Upload } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert.tsx'
-import { generateNote } from '@/services/note.ts'
+import { convertDocument, generateNote } from '@/services/note.ts'
 import { uploadFile } from '@/services/upload.ts'
 import { useTaskStore } from '@/store/taskStore'
 import { useModelStore } from '@/store/modelStore'
@@ -47,12 +47,13 @@ const withScheme = (url: string) => (/^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url 
 
 const formSchema = z
   .object({
+    mode: z.enum(['video', 'document']).default('video'),
     video_url: z.string().optional(),
     platform: z.string().nonempty('请选择平台'),
     quality: z.enum(['fast', 'medium', 'slow']),
     screenshot: z.boolean().optional(),
     link: z.boolean().optional(),
-    model_name: z.string().nonempty('请选择模型'),
+    model_name: z.string().optional(),
     format: z.array(z.string()).default([]),
     style: z.string().nonempty('请选择笔记生成风格'),
     extras: z.string().optional(),
@@ -62,8 +63,19 @@ const formSchema = z
       .tuple([z.coerce.number().min(1).max(10), z.coerce.number().min(1).max(10)])
       .default([2, 2])
       .optional(),
+    document_file: z.instanceof(File).optional(),
+    ocr_mode: z.enum(['offline_first', 'offline_only', 'visual_fallback', 'off']).default('offline_first'),
   })
-  .superRefine(({ video_url, platform }, ctx) => {
+  .superRefine(({ mode, video_url, platform, document_file, model_name }, ctx) => {
+    if (mode === 'document') {
+      if (!document_file) {
+        ctx.addIssue({ code: 'custom', message: '请选择要转换的文档', path: ['document_file'] })
+      }
+      return
+    }
+    if (!model_name) {
+      ctx.addIssue({ code: 'custom', message: '请选择模型', path: ['model_name'] })
+    }
     if (platform === 'local') {
       if (!video_url) {
         ctx.addIssue({ code: 'custom', message: '本地视频路径不能为空', path: ['video_url'] })
@@ -135,6 +147,7 @@ const NoteForm = () => {
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
+  const [documentName, setDocumentName] = useState('')
   /* ---- 全局状态 ---- */
   const { addPendingTask, currentTaskId, setCurrentTask, getCurrentTask, retryTask } =
     useTaskStore()
@@ -145,6 +158,7 @@ const NoteForm = () => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       platform: 'bilibili',
+      mode: 'video',
       quality: 'medium',
       model_name: modelList[0]?.model_name || '',
       style: 'minimal',
@@ -157,6 +171,8 @@ const NoteForm = () => {
 
   /* ---- 派生状态（只 watch 一次，提高性能） ---- */
   const platform = useWatch({ control: form.control, name: 'platform' }) as string
+  const mode = useWatch({ control: form.control, name: 'mode' })
+  const documentOcrMode = useWatch({ control: form.control, name: 'ocr_mode' })
   const videoUnderstandingEnabled = useWatch({ control: form.control, name: 'video_understanding' })
   const editing = currentTask && currentTask.id
 
@@ -177,6 +193,7 @@ const NoteForm = () => {
 
     form.reset({
       platform: formData.platform || 'bilibili',
+      mode: formData.mode || 'video',
       video_url: formData.video_url || '',
       model_name: formData.model_name || modelList[0]?.model_name || '',
       style: formData.style || 'minimal',
@@ -221,7 +238,23 @@ const NoteForm = () => {
   }
 
   const onSubmit = async (values: NoteFormValues) => {
-    console.log('Not even go here')
+    if (values.mode === 'document') {
+      if (!values.document_file) return
+      const documentData = new FormData()
+      documentData.append('file', values.document_file)
+      documentData.append('ocr_mode', values.ocr_mode)
+      if (values.ocr_mode !== 'offline_only' && values.ocr_mode !== 'off' && values.model_name) {
+        documentData.append('model_name', values.model_name)
+        documentData.append('provider_id', modelList.find(m => m.model_name === values.model_name)?.provider_id || '')
+      }
+      try {
+        const data = await convertDocument(documentData)
+        addPendingTask(data.task_id, 'document', { ...values, document_name: values.document_file.name })
+      } catch (error) {
+        console.error('提交文档转换失败：', error)
+      }
+      return
+    }
     const payload: NoteFormValues = {
       ...values,
       video_url:
@@ -295,6 +328,89 @@ const NoteForm = () => {
         <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-4">
           {/* 顶部按钮 */}
           <FormButton></FormButton>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant={mode === 'video' ? 'default' : 'outline'} onClick={() => form.setValue('mode', 'video')}>
+              视频笔记
+            </Button>
+            <Button type="button" variant={mode === 'document' ? 'default' : 'outline'} onClick={() => form.setValue('mode', 'document')}>
+              <FileText className="mr-2 h-4 w-4" />文档转换
+            </Button>
+          </div>
+
+          {mode === 'document' ? (
+            <>
+              <SectionHeader title="转换文档" tip="支持 Office、PDF、EPUB、网页、文本、邮件、图片和 ZIP 等本地文件" />
+              <FormField
+                control={form.control}
+                name="document_file"
+                render={({ field }) => (
+                  <FormItem>
+                    <label className="hover:border-primary flex h-32 cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-gray-300 transition-colors">
+                      <Upload className="mb-2 h-5 w-5 text-neutral-500" />
+                      <span className="text-sm text-neutral-600">{documentName || '选择或拖入本地文件'}</span>
+                      <input
+                        className="hidden"
+                        type="file"
+                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.epub,.html,.htm,.csv,.tsv,.json,.xml,.yaml,.yml,.txt,.md,.ipynb,.msg,.zip,image/*"
+                        disabled={!!editing}
+                        onChange={event => {
+                          const file = event.target.files?.[0]
+                          field.onChange(file)
+                          setDocumentName(file?.name || '')
+                        }}
+                      />
+                    </label>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="ocr_mode"
+                render={({ field }) => (
+                  <FormItem>
+                    <SectionHeader title="OCR 策略" tip="默认使用本地 OCR，识别不足时可调用已配置的视觉模型" />
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="offline_first">离线优先，视觉模型兜底</SelectItem>
+                        <SelectItem value="offline_only">仅离线 OCR</SelectItem>
+                        <SelectItem value="visual_fallback">仅视觉模型 OCR</SelectItem>
+                        <SelectItem value="off">不做 OCR</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="model_name"
+                render={({ field }) => (
+                  <FormItem>
+                    <SectionHeader title="视觉模型" tip="仅在离线 OCR 未识别到文字时作为兜底使用" />
+                    <Select value={field.value || ''} onValueChange={field.onChange}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="不使用视觉模型" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {modelList.map(model => <SelectItem key={model.id} value={model.model_name}>{model.model_name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={documentOcrMode === 'offline_first' || documentOcrMode === 'visual_fallback'}
+                  onCheckedChange={enabled => {
+                    if (enabled) form.setValue('ocr_mode', 'offline_first')
+                    else if (documentOcrMode === 'offline_first') form.setValue('ocr_mode', 'offline_only')
+                    else if (documentOcrMode === 'visual_fallback') form.setValue('ocr_mode', 'off')
+                  }}
+                />
+                <FormLabel>离线识别不足时使用视觉模型兜底</FormLabel>
+              </div>
+            </>
+          ) : <>
 
           {/* 视频链接 & 平台 */}
           <SectionHeader title="视频链接" tip="支持 B 站、YouTube、抖音、快手和小红书" />
@@ -575,6 +691,7 @@ const NoteForm = () => {
               </FormItem>
             )}
           />
+          </>}
         </form>
       </Form>
     </div>
