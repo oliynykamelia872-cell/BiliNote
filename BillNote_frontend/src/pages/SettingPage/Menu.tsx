@@ -4,6 +4,7 @@ import {
   HardDriveDownload,
   Info,
   Activity,
+  FolderOpen,
 } from 'lucide-react'
 import MenuBar, { IMenuProps } from '@/pages/SettingPage/components/menuBar.tsx'
 
@@ -39,6 +40,12 @@ const Menu = () => {
       name: '部署监控',
       icon: <Activity />,
       path: '/settings/monitor',
+    },
+    {
+      id: 'obsidian',
+      name: 'Obsidian 知识库',
+      icon: <FolderOpen />,
+      path: '/settings/obsidian',
     },
     {
       id: 'about',

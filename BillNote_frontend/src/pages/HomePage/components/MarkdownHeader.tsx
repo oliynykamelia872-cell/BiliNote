@@ -31,6 +31,7 @@ interface NoteHeaderProps {
   showTranscriptControl?: boolean
   showChat?: false | 'half' | 'full'
   setShowChat?: (mode: false | 'half' | 'full') => void
+  onArchive?: () => void
 }
 
 export function MarkdownHeader({
@@ -51,6 +52,7 @@ export function MarkdownHeader({
   setShowChat,
   viewMode,
   setViewMode,
+  onArchive,
 }: NoteHeaderProps) {
   const [copied, setCopied] = useState(false)
 
@@ -148,6 +150,7 @@ export function MarkdownHeader({
             <TooltipContent>思维导图</TooltipContent>
           </Tooltip>
         </TooltipProvider>
+        {onArchive && <TooltipProvider><Tooltip><TooltipTrigger asChild><Button onClick={onArchive} variant="ghost" size="sm" className="h-8 px-2"><span className="text-sm">转存 Obsidian</span></Button></TooltipTrigger><TooltipContent>转存到 Obsidian 知识库</TooltipContent></Tooltip></TooltipProvider>}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>

@@ -25,6 +25,7 @@ import TranscriptViewer from '@/pages/HomePage/components/transcriptViewer.tsx'
 import MarkmapEditor from '@/pages/HomePage/components/MarkmapComponent.tsx'
 import ChatPanel from '@/pages/HomePage/components/ChatPanel.tsx'
 import VideoBanner from '@/pages/HomePage/components/VideoBanner.tsx'
+import ObsidianArchiveDialog from '@/pages/HomePage/components/ObsidianArchiveDialog.tsx'
 
 interface VersionNote {
   ver_id: string
@@ -331,6 +332,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
   const [showTranscribe, setShowTranscribe] = useState(false)
   const [showChat, setShowChat] = useState<false | 'half' | 'full'>(false)
   const [viewMode, setViewMode] = useState<'map' | 'preview'>('preview')
+  const [showArchive, setShowArchive] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
 
   // 缓存 ReactMarkdown components，仅在 baseURL 变化时重建
@@ -355,7 +357,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
         setCurrentVerId(latestVersion.ver_id)
       }
     }
-  }, [currentTask?.id, taskStatus])
+  }, [currentTask?.id, currentTask?.markdown, taskStatus])
   useEffect(() => {
     if (!currentTask || !isMultiVersion) return
 
@@ -493,6 +495,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
         setShowChat={setShowChat}
         viewMode={viewMode}
         setViewMode={setViewMode}
+        onArchive={() => setShowArchive(true)}
       />
 
       {viewMode === 'map' ? (
@@ -572,6 +575,17 @@ const MarkdownViewer: FC<MarkdownViewerProps> = memo(({ status }) => {
             </div>
           )}
         </div>
+      )}
+      {showArchive && currentTask && (
+        <ObsidianArchiveDialog
+          taskId={currentTask.id}
+          markdown={selectedContent}
+          title={currentTask.audioMeta?.title || '未命名笔记'}
+          source={currentTask.formData?.video_url}
+          model={modelName}
+          revisionId={currentVerId}
+          onClose={() => setShowArchive(false)}
+        />
       )}
     </div>
   )

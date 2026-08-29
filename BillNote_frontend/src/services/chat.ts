@@ -35,10 +35,26 @@ export const askQuestion = async (data: {
   history: ChatMessage[]
   provider_id: string
   model_name: string
+  signal?: AbortSignal
 }): Promise<AskResponse> => {
-  return await request.post('/chat/ask', data, { timeout: 60000 })
+  const { signal, ...payload } = data
+  return await request.post('/chat/ask', payload, { timeout: 60000, signal })
 }
 
 export const getChatStatus = async (taskId: string): Promise<ChatStatusResponse> => {
   return await request.get(`/chat/status?task_id=${taskId}`)
+}
+
+export const reviseNote = async (data: {
+  task_id: string
+  instruction: string
+  markdown: string
+  selection?: string
+  history: ChatMessage[]
+  provider_id: string
+  model_name: string
+  signal?: AbortSignal
+}): Promise<{ candidate_markdown: string; scope: 'full' | 'selection'; notes: string }> => {
+  const { signal, ...payload } = data
+  return await request.post('/chat/revise', payload, { timeout: 120000, signal })
 }

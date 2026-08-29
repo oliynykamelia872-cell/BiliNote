@@ -26,7 +26,9 @@ export default defineConfig(({ mode }) => {
   const envDir = process.env.DOCKER_BUILD ? __dirname : path.resolve(__dirname, '../')
   const env = loadEnv(mode, envDir)
 
-  const apiBaseUrl = env.VITE_API_BASE_URL || 'http://127.0.0.1:8483'
+  // API 客户端可能配置为带 /api 的地址，但 Vite 代理自身已经保留 /api 前缀。
+  // 统一去掉后缀，避免开发模式请求变成 /api/api/...
+  const apiBaseUrl = (env.VITE_API_BASE_URL || 'http://127.0.0.1:8483').replace(/\/api\/?$/, '')
   const port = parseInt(env.VITE_FRONTEND_PORT || '3015', 10)
   const appVersion = env.VITE_APP_VERSION || process.env.VITE_APP_VERSION || readAppVersion()
 

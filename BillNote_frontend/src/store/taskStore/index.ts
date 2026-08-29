@@ -85,6 +85,7 @@ interface TaskStore {
   getCurrentTask: () => Task | null
   retryTask: (id: string) => void
   cancelTask: (id: string) => Promise<void>
+  applyRevision: (id: string, markdown: string, modelName?: string) => void
 }
 
 export const useTaskStore = create<TaskStore>()(
@@ -236,6 +237,31 @@ export const useTaskStore = create<TaskStore>()(
           toast.error('停止任务失败')
           throw error
         }
+      },
+
+      applyRevision: (id, markdown, modelName = 'AI 修订') => {
+        const task = get().tasks.find(item => item.id === id)
+        if (!task) return
+        set(state => ({
+          tasks: state.tasks.map(item => {
+            if (item.id !== id) return item
+            const previous = Array.isArray(item.markdown) ? item.markdown : (item.markdown ? [{
+              ver_id: `${id}-${uuidv4()}`,
+              content: item.markdown,
+              style: item.formData.style || '',
+              model_name: item.formData.model_name || '',
+              created_at: item.createdAt,
+            }] : [])
+            const revision = {
+              ver_id: `${id}-${uuidv4()}`,
+              content: markdown,
+              style: item.formData.style || '',
+              model_name: modelName,
+              created_at: new Date().toISOString(),
+            }
+            return { ...item, markdown: [revision, ...previous] }
+          }),
+        }))
       },
 
 
