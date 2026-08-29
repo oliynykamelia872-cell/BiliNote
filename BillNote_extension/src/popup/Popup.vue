@@ -185,7 +185,7 @@ onUnmounted(() => {
     </div>
 
     <div v-if="!supported" class="text-xs text-amber-700 bg-amber-50 p-2 rounded">
-      当前页面不是 BiliNote 支持的视频链接（Bilibili / YouTube / Douyin / Kuaishou）
+      当前页面不是 BiliNote 支持的视频链接（Bilibili / YouTube / Douyin / Kuaishou / Apple Podcasts）
     </div>
 
     <fieldset class="border rounded p-2 flex flex-col gap-2" :disabled="!supported || submitting">

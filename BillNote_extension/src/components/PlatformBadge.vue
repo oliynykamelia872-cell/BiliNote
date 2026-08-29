@@ -12,6 +12,7 @@ const colorMap: Record<Platform, string> = {
   kuaishou: 'bg-orange-100 text-orange-700',
   xiaohongshu: 'bg-rose-100 text-rose-700',
   wechat_channels: 'bg-green-100 text-green-700',
+  apple_podcasts: 'bg-violet-100 text-violet-700',
   local: 'bg-gray-100 text-gray-600',
 }
 

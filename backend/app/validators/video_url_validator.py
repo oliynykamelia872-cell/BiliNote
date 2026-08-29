@@ -11,6 +11,7 @@ SUPPORTED_PLATFORMS = {
     "kuaishou": "kuaishou",
     "xiaohongshu": "xiaohongshu",
     "wechat_channels": "wechat_channels",
+    "apple_podcasts": "apple_podcasts",
 }
 
 
@@ -40,6 +41,13 @@ def is_supported_video_url(url: str) -> bool:
                 or hostname.endswith(".channels.weixin.qq.com")
             ) and ("/sph/" in parsed.path or "/finder-preview/" in parsed.path):
                 return True
+        elif name == "apple_podcasts":
+            hostname = (parsed.hostname or "").lower()
+            if (
+                hostname == "podcasts.apple.com"
+                or hostname.endswith(".podcasts.apple.com")
+            ) and re.search(r"/id\d+", parsed.path) and parsed.query:
+                return "i" in parsed.query
         elif pattern in ["douyin", "kuaishou"]:
             if pattern in url:
                 return True

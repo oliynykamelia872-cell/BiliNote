@@ -10,6 +10,7 @@ const COOKIE_DOMAINS: Record<Exclude<Platform, 'local'>, string> = {
   kuaishou: '.kuaishou.com',
   xiaohongshu: '.xiaohongshu.com',
   wechat_channels: '.weixin.qq.com',
+  apple_podcasts: '.podcasts.apple.com',
 }
 
 export const SUPPORTED_COOKIE_PLATFORMS: Array<Exclude<Platform, 'local'>> = [
@@ -19,6 +20,7 @@ export const SUPPORTED_COOKIE_PLATFORMS: Array<Exclude<Platform, 'local'>> = [
   'youtube',
   'xiaohongshu',
   'wechat_channels',
+  'apple_podcasts',
 ]
 
 export async function readBrowserCookies(platform: Exclude<Platform, 'local'>): Promise<string> {

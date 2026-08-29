@@ -157,6 +157,7 @@ browser.runtime.onInstalled.addListener(() => {
         '*://youtu.be/*',
         '*://*.douyin.com/*',
         '*://*.kuaishou.com/*',
+        '*://podcasts.apple.com/*',
       ],
     })
   }

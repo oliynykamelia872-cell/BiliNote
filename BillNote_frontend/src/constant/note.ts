@@ -1,5 +1,6 @@
 /* -------------------- 常量 -------------------- */
 import {
+  ApplePodcastsLogo,
   BiliBiliLogo,
   DouyinLogo,
   KuaishouLogo,
@@ -29,6 +30,7 @@ export const noteStyles = [
 ] as const
 
 export const videoPlatforms = [
+  { label: 'Apple Podcasts', value: 'apple_podcasts', logo: ApplePodcastsLogo },
   { label: '哔哩哔哩', value: 'bilibili', logo: BiliBiliLogo },
   { label: 'YouTube', value: 'youtube', logo: YoutubeLogo },
   { label: '抖音', value: 'douyin', logo: DouyinLogo },

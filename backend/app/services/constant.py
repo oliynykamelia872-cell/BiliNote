@@ -1,4 +1,5 @@
 from app.downloaders.bilibili_downloader import BilibiliDownloader
+from app.downloaders.apple_podcasts_downloader import ApplePodcastsDownloader
 from app.downloaders.douyin_downloader import DouyinDownloader
 from app.downloaders.kuaishou_downloader import KuaiShouDownloader
 from app.downloaders.local_downloader import LocalDownloader
@@ -7,6 +8,7 @@ from app.downloaders.xiaohongshu_downloader import XiaohongshuDownloader
 from app.downloaders.wechat_channels_downloader import WechatChannelsDownloader
 
 SUPPORT_PLATFORM_MAP = {
+    'apple_podcasts':ApplePodcastsDownloader(),
     'youtube':YoutubeDownloader(),
     'bilibili':BilibiliDownloader(),
     'tiktok':DouyinDownloader(),

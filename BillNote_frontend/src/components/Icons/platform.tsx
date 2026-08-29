@@ -17,6 +17,17 @@ export const XiaohongshuLogo = () => {
   )
 }
 
+export const ApplePodcastsLogo = () => {
+  return (
+    <svg className="icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="200" height="200" aria-hidden="true">
+      <rect width="1024" height="1024" rx="180" fill="#7E57C2" />
+      <circle cx="512" cy="512" r="292" fill="none" stroke="#fff" strokeWidth="68" />
+      <circle cx="512" cy="392" r="78" fill="#fff" />
+      <path d="M434 722h156l-29-191h-98z" fill="#fff" />
+    </svg>
+  )
+}
+
 export const WechatChannelsLogo = () => {
   return (
     <svg

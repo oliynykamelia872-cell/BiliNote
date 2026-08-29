@@ -78,6 +78,19 @@ class TestVideoUrlSupport(unittest.TestCase):
                 self.assertEqual(url_parser.extract_video_id(url, "wechat_channels"), "ArWtRAQJv7")
                 self.assertTrue(video_url_validator.is_supported_video_url(url))
 
+    def test_accepts_apple_podcasts_episode_link(self):
+        url = "https://podcasts.apple.com/cn/podcast/example/id1498541229?i=1000773193034"
+
+        self.assertEqual(url_parser.extract_video_id(url, "apple_podcasts"), "1000773193034")
+        self.assertTrue(video_url_validator.is_supported_video_url(url))
+
+    def test_rejects_apple_podcasts_show_link_without_episode(self):
+        self.assertFalse(
+            video_url_validator.is_supported_video_url(
+                "https://podcasts.apple.com/cn/podcast/example/id1498541229"
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

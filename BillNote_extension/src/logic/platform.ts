@@ -12,6 +12,8 @@ export function detectPlatform(url: string | undefined | null): Platform | null 
     return 'xiaohongshu'
   if (/(weixin\.qq\.com\/sph\/|channels\.weixin\.qq\.com\/finder-preview\/)/.test(url))
     return 'wechat_channels'
+  if (/podcasts\.apple\.com\/.+\/id\d+.*[?&]i=\d+/.test(url))
+    return 'apple_podcasts'
   if (url.includes('douyin'))
     return 'douyin'
   if (url.includes('kuaishou'))
@@ -26,5 +28,6 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   kuaishou: '快手',
   xiaohongshu: '小红书',
   wechat_channels: '微信视频号',
+  apple_podcasts: 'Apple Podcasts',
   local: '本地',
 }

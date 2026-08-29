@@ -8,7 +8,7 @@ def extract_video_id(url: str, platform: str) -> Optional[str]:
     从视频链接中提取视频 ID
 
     :param url: 视频链接
-    :param platform: 平台名（bilibili / youtube / douyin / xiaohongshu / wechat_channels）
+    :param platform: 平台名（bilibili / youtube / douyin / xiaohongshu / wechat_channels / apple_podcasts）
     :return: 提取到的视频 ID 或 None
     """
     if platform == "bilibili":
@@ -43,6 +43,10 @@ def extract_video_id(url: str, platform: str) -> Optional[str]:
         if match:
             return match.group(1)
         match = re.search(r"[?&]id=([0-9A-Za-z_-]+)", url)
+        return match.group(1) if match else None
+
+    elif platform == "apple_podcasts":
+        match = re.search(r"[?&]i=(\d+)", url)
         return match.group(1) if match else None
 
     return None
