@@ -78,7 +78,7 @@ const formSchema = z
     }
     if (platform === 'local') {
       if (!video_url) {
-        ctx.addIssue({ code: 'custom', message: '本地视频路径不能为空', path: ['video_url'] })
+        ctx.addIssue({ code: 'custom', message: '本地文件路径不能为空', path: ['video_url'] })
       }
     }
     else {
@@ -99,6 +99,13 @@ const formSchema = z
   })
 
 export type NoteFormValues = z.infer<typeof formSchema>
+
+/* 本地纯音频扩展名：上传音频文件时自动关闭截图 / 视频理解 */
+const AUDIO_FILE_EXTENSIONS = ['mp3', 'm4a', 'm4b', 'aac', 'wav', 'flac', 'ogg', 'opus', 'wma', 'aiff', 'alac']
+const isAudioFileName = (name: string) => {
+  const ext = name.split('.').pop()?.toLowerCase() || ''
+  return AUDIO_FILE_EXTENSIONS.includes(ext)
+}
 
 /* -------------------- 可复用子组件 -------------------- */
 const SectionHeader = ({ title, tip }: { title: string; tip?: string }) => (
@@ -174,6 +181,8 @@ const NoteForm = () => {
   const mode = useWatch({ control: form.control, name: 'mode' })
   const documentOcrMode = useWatch({ control: form.control, name: 'ocr_mode' })
   const videoUnderstandingEnabled = useWatch({ control: form.control, name: 'video_understanding' })
+  const videoUrl = useWatch({ control: form.control, name: 'video_url' })
+  const isLocalAudio = platform === 'local' && isAudioFileName(videoUrl || '')
   const editing = currentTask && currentTask.id
 
   const goModelAdd = () => {
@@ -214,6 +223,16 @@ const NoteForm = () => {
     // 还要加上 formData 的各字段，或者直接 currentTask
     currentTask?.formData,
   ])
+
+  /* 选中本地音频时，自动关闭截图与视频理解选项 */
+  useEffect(() => {
+    if (!isLocalAudio) return
+    form.setValue('video_understanding', false)
+    const formats = form.getValues('format') || []
+    if (formats.includes('screenshot')) {
+      form.setValue('format', formats.filter(v => v !== 'screenshot'))
+    }
+  }, [isLocalAudio, form])
 
   /* ---- 帮助函数 ---- */
   const isGenerating = () => !['SUCCESS', 'FAILED', undefined].includes(getCurrentTask()?.status)
@@ -412,8 +431,8 @@ const NoteForm = () => {
             </>
           ) : <>
 
-          {/* 视频链接 & 平台 */}
-          <SectionHeader title="视频链接" tip="支持 B 站、YouTube、抖音、快手和小红书" />
+          {/* 内容链接 & 平台 */}
+          <SectionHeader title="内容链接" tip="支持 B 站、YouTube、抖音、快手、小红书，以及本地视频/音频文件" />
           <div className="flex gap-2">
             {/* 平台选择 */}
 
@@ -456,7 +475,7 @@ const NoteForm = () => {
                 <FormItem className="flex-1">
                   {platform === 'local' ? (
                     <>
-                      <Input disabled={!!editing} placeholder="请输入本地视频路径" {...field} />
+                      <Input disabled={!!editing} placeholder="请输入本地视频/音频路径" {...field} />
                     </>
                   ) : (
                     <Input disabled={!!editing} placeholder="请输入视频网站链接" {...field} />
@@ -488,7 +507,7 @@ const NoteForm = () => {
                       onClick={() => {
                         const input = document.createElement('input')
                         input.type = 'file'
-                        input.accept = 'video/*'
+                        input.accept = 'video/*,audio/*,.mp3,.m4a,.m4b,.aac,.wav,.flac,.ogg,.opus,.wma'
                         input.onchange = e => {
                           const file = (e.target as HTMLInputElement).files?.[0]
                           if (file) handleFileUpload(file, field.onChange)
@@ -502,8 +521,8 @@ const NoteForm = () => {
                         <p className="text-center text-sm text-green-500">上传成功！</p>
                       ) : (
                         <p className="text-center text-sm text-gray-500">
-                          拖拽文件到这里上传 <br />
-                          <span className="text-xs text-gray-400">或点击选择文件</span>
+                          拖拽视频或音频文件到这里上传 <br />
+                          <span className="text-xs text-gray-400">或点击选择文件，支持 MP3 / M4A / WAV 等音频</span>
                         </p>
                       )}
                     </div>
@@ -593,6 +612,13 @@ const NoteForm = () => {
           {/* 视频理解 */}
           <SectionHeader title="视频理解" tip="将视频截图发给多模态模型辅助分析" />
           <div className="flex flex-col gap-2">
+            {isLocalAudio && (
+              <Alert variant="warning" className="text-sm">
+                <AlertDescription>
+                  当前为本地音频文件，没有视频画面，截图与视频理解已自动关闭。
+                </AlertDescription>
+              </Alert>
+            )}
             <FormField
               control={form.control}
               name="video_understanding"
@@ -602,6 +628,7 @@ const NoteForm = () => {
                     <FormLabel>启用</FormLabel>
                     <Checkbox
                       checked={videoUnderstandingEnabled}
+                      disabled={isLocalAudio}
                       onCheckedChange={v => form.setValue('video_understanding', v)}
                     />
                   </div>
@@ -671,7 +698,7 @@ const NoteForm = () => {
                   onChange={field.onChange}
                   disabledMap={{
                     link: platform === 'local',
-                    screenshot: !videoUnderstandingEnabled,
+                    screenshot: !videoUnderstandingEnabled || isLocalAudio,
                   }}
                 />
                 <FormMessage />

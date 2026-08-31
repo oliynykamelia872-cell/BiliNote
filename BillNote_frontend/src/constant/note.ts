@@ -37,5 +37,5 @@ export const videoPlatforms = [
   { label: '快手', value: 'kuaishou', logo: KuaishouLogo },
   { label: '小红书', value: 'xiaohongshu', logo: XiaohongshuLogo },
   { label: '微信视频号', value: 'wechat_channels', logo: WechatChannelsLogo },
-  { label: '本地视频', value: 'local', logo: LocalLogo },
+  { label: '本地文件', value: 'local', logo: LocalLogo },
 ] as const

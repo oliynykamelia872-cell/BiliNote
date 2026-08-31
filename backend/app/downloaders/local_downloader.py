@@ -11,6 +11,35 @@ import subprocess
 
 from app.utils.video_helper import save_cover_to_static
 
+# 纯音频文件扩展名（不含视频画面流）。这类文件不需要转码成 mp3，
+# 转写器（faster-whisper / mlx-whisper / 在线接口）可直接解码；也没有视频流可截封面。
+AUDIO_EXTENSIONS = {
+    ".mp3", ".m4a", ".m4b", ".aac", ".wav", ".flac", ".ogg", ".opus",
+    ".wma", ".aiff", ".alac", ".amr", ".mka",
+}
+
+
+def is_audio_file(path: str) -> bool:
+    """根据扩展名判断是否为纯音频文件（不含视频流）。"""
+    ext = os.path.splitext(str(path))[1].lower()
+    return ext in AUDIO_EXTENSIONS
+
+
+def get_media_duration(input_path: str) -> float:
+    """用 ffprobe 读取媒体时长（秒），失败时返回 0，不影响主流程。"""
+    try:
+        command = [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            input_path,
+        ]
+        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return float(result.stdout.decode().strip())
+    except Exception:
+        return 0.0
+
 
 class LocalDownloader(Downloader, ABC):
     def __init__(self):
@@ -96,7 +125,10 @@ class LocalDownloader(Downloader, ABC):
 
         if not os.path.exists(video_url):
             raise FileNotFoundError()
+        if is_audio_file(video_url):
+            raise ValueError("音频文件不含视频画面，无法进行截图或视频理解")
         return video_url
+
     def download(
             self,
             video_url: str,
@@ -117,16 +149,34 @@ class LocalDownloader(Downloader, ABC):
 
         file_name = os.path.basename(video_url)
         title, _ = os.path.splitext(file_name)
-        print(title, file_name,video_url)
-        file_path=self.convert_to_mp3(video_url)
+
+        # 纯音频文件（mp3 / m4a / wav 等）：直接使用原文件，不转码、不截封面
+        if is_audio_file(video_url):
+            print(f"检测到本地音频文件: {file_name}")
+            return AudioDownloadResult(
+                file_path=video_url,
+                title=title,
+                duration=get_media_duration(video_url),
+                cover_url=None,
+                platform="local",
+                video_id=title,
+                raw_info={
+                    'path': video_url,
+                    'is_audio': True,
+                    'extension': os.path.splitext(video_url)[1].lower(),
+                },
+                video_path=None
+            )
+
+        file_path = self.convert_to_mp3(video_url)
         cover_path = self.extract_cover(video_url)
         cover_url = save_cover_to_static(cover_path)
 
-        print('file——path',file_path)
+        print('file——path', file_path)
         return AudioDownloadResult(
             file_path=file_path,
             title=title,
-            duration=0,  # 可选：后续加上读取时长
+            duration=get_media_duration(video_url),
             cover_url=cover_url,  # 暂无封面
             platform="local",
             video_id=title,

@@ -82,7 +82,7 @@ BiliNote 是一个开源的 AI 视频笔记助手，支持通过哔哩哔哩、Y
 
 ## 🔧 功能特性
 
-- 支持多平台：Bilibili、YouTube、本地视频、抖音、快手、Apple Podcasts
+- 支持多平台：Bilibili、YouTube、本地视频/音频（MP3、M4A、WAV 等）、抖音、快手、Apple Podcasts
 - 支持返回笔记格式选择
 - 支持笔记风格选择
 - 支持多模态视频理解
@@ -262,7 +262,7 @@ docker logs -f bilinote-backend
 - `./backend/bili_note.db` —— SQLite 库（含 LLM 供应商配置、笔记历史）
 - `./backend/config/transcriber.json` —— 转写器运行时配置
 - `./backend/static/screenshots/` —— 视频截图
-- `./backend/uploads/` —— 上传的本地视频
+- `./backend/uploads/` —— 上传的本地视频/音频
 
 要彻底重置就 `docker-compose down && rm backend/bili_note.db backend/config/transcriber.json`。
 

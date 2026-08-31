@@ -85,7 +85,7 @@ export default function AboutPage() {
           <h2 className="mb-8 text-center text-3xl font-bold">🔧 功能特性</h2>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {[
-              { title: '多平台支持', desc: '支持 Bilibili、YouTube、抖音、快手、小红书、Apple Podcasts 和本地视频' },
+              { title: '多平台支持', desc: '支持 Bilibili、YouTube、抖音、快手、小红书、Apple Podcasts 和本地视频/音频' },
               { title: '笔记格式选择', desc: '支持返回多种笔记格式，满足不同需求' },
               { title: '笔记风格选择', desc: '支持多种笔记风格，个性化定制' },
               { title: '多模态视频理解', desc: '结合视觉和音频内容，全面理解视频' },

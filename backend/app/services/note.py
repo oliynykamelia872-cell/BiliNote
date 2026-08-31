@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from app.downloaders.base import Downloader
 from app.downloaders.bilibili_downloader import BilibiliDownloader
 from app.downloaders.douyin_downloader import DouyinDownloader
-from app.downloaders.local_downloader import LocalDownloader
+from app.downloaders.local_downloader import LocalDownloader, is_audio_file
 from app.downloaders.youtube_downloader import YoutubeDownloader
 from app.db.video_task_dao import delete_task_by_video, insert_video_task
 from app.enmus.exception import NoteErrorEnum, ProviderErrorEnum
@@ -249,6 +249,15 @@ class NoteGenerator:
                 )
                 task_serial_executor.raise_if_cancelled(task_id)
 
+            # 本地音频没有视频画面：强制去掉截图 / 视频理解相关选项，
+            # 避免 GPT 生成 *Screenshot-mm:ss* 标记后无处替换
+            if audio_meta is not None and audio_meta.platform == "local" and audio_meta.raw_info.get("is_audio"):
+                if screenshot or video_understanding or ("screenshot" in (_format or [])):
+                    logger.info("本地音频文件：自动关闭截图与视频理解选项")
+                screenshot = False
+                video_understanding = False
+                _format = [f for f in (_format or []) if f != "screenshot"]
+
             # 3. GPT 总结
             markdown = self._summarize_text(
                 audio_meta=audio_meta,
@@ -454,6 +463,14 @@ class NoteGenerator:
 
         # 判断是否需要下载视频
         need_video = screenshot or video_understanding
+        # 本地纯音频文件没有视频画面：截图 / 视频理解自动跳过，只做音频转写与总结
+        if need_video and platform == "local" and is_audio_file(str(video_url)):
+            logger.warning(
+                f"本地音频文件不支持截图/视频理解，已自动跳过 (task_id={task_id})"
+            )
+            need_video = False
+            screenshot = False
+            video_understanding = False
         if screenshot and not grid_size:
             grid_size = [2, 2]
 
