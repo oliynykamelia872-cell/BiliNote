@@ -60,6 +60,7 @@ Load unpacked at `chrome://extensions/` → select `BillNote_extension/extension
   - `chat_service.py` + `chat_tools.py` + `vector_store.py` — RAG-based AI Q&A with Function Calling, indexing transcripts and video metadata
   - `cookie_manager.py` — per-platform cookie storage; injected into yt-dlp by downloaders (e.g. Bilibili)
   - `transcriber_config_manager.py` — persisted transcriber settings
+  - `default_model_config_manager.py` — persisted default LLM model (UI-written `config/model_preference.json`); all LLM entrypoints resolve model identity through `ModelService.resolve_model_pair`, strictly validating the provider is enabled and the model is registered
 - `app/downloaders/` — Platform adapters (bilibili, youtube, douyin, kuaishou, local) with shared `base.py` interface
 - `app/transcriber/` — Speech-to-text engines (fast-whisper, groq, bcut, kuaishou, mlx-whisper) with factory in `transcriber_provider.py`. YouTube path prefers existing subtitles and skips audio download when available.
 - `app/gpt/` — LLM integration with factory pattern (`gpt_factory.py`), prompt templates (`prompt.py`, `prompt_builder.py`), and `request_chunker.py` for long transcripts

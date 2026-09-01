@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { addProvider, addModel, testConnection, getProviderList, updateProviderById } from '@/services/model'
+import {
+  addProvider,
+  addModel,
+  testConnection,
+  getProviderList,
+  updateProviderById,
+  getDefaultModel,
+  setDefaultModel,
+} from '@/services/model'
 import { getTranscriberConfig, updateTranscriberConfig } from '@/services/transcriber'
 import logo from '@/assets/icon.svg'
 
@@ -61,13 +69,34 @@ const Onboarding = () => {
   const [providerName, setProviderName] = useState('OpenAI')
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1')
-  const [modelName, setModelName] = useState('gpt-4o-mini')
+  const [modelName, setModelName] = useState('')
   const [providerId, setProviderId] = useState<string | null>(null)
   const [savingProvider, setSavingProvider] = useState(false)
 
   // step 3
   const [transcriberType, setTranscriberType] = useState<string>('groq')
   const [savingTranscriber, setSavingTranscriber] = useState(false)
+
+  // 服务端已有默认模型时预填引导表单（供应商名 / 模型名保持一致）
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [def, providers]: any[] = await Promise.all([
+          getDefaultModel(),
+          getProviderList({ silent: true }),
+        ])
+        if (cancelled || !def?.provider_id || !def?.model_name)
+          return
+        const matched = (providers || []).find((p: any) => p?.id === def.provider_id)
+        if (matched?.name)
+          setProviderName(matched.name)
+        setModelName(def.model_name)
+      }
+      catch { /* 未配置默认模型或后端不可用，保持空表单 */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   function next() {
     setError('')
@@ -184,6 +213,14 @@ const Onboarding = () => {
       try { await testConnection({ id: pid!, model: modelName.trim() }, { silent: true }) }
       catch (e: any) {
         console.warn('测试连接失败：', errText(e))
+      }
+
+      // 保存为服务端默认模型（严格校验已登记后写入，失败不阻断引导）
+      try {
+        await setDefaultModel({ provider_id: pid!, model_name: modelName.trim() }, { silent: true })
+      }
+      catch (e: any) {
+        console.warn('保存默认模型失败：', errText(e))
       }
       next()
     }

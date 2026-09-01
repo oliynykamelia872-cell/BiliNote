@@ -7,11 +7,93 @@ from app.exceptions.provider import ProviderError
 from app.gpt.gpt_factory import GPTFactory
 from app.gpt.provider.OpenAI_compatible_provider import OpenAICompatibleProvider
 from app.models.model_config import ModelConfig
+from app.services.default_model_config_manager import DefaultModelConfigManager
 from app.services.provider import ProviderService
 from app.utils.logger import get_logger
 
 logger=get_logger(__name__)
 class ModelService:
+
+    @staticmethod
+    def _validate_pair(provider_id: str, model_name: str):
+        """校验一对 (provider_id, model_name)：供应商存在且启用、模型已登记。"""
+        if not provider_id or not model_name:
+            raise ProviderError(
+                code=ProviderErrorEnum.WRONG_PARAMETER,
+                message="provider_id 与 model_name 必须同时提供，或都不提供以使用默认模型",
+            )
+        provider = ProviderService.get_provider_by_id(provider_id)
+        if not provider:
+            raise ProviderError(
+                code=ProviderErrorEnum.NOT_FOUND,
+                message=f"供应商 {provider_id} 不存在，请先在模型供应商页配置",
+            )
+        if not provider.get("enabled"):
+            raise ProviderError(
+                code=ProviderErrorEnum.NOT_FOUND,
+                message=f"供应商「{provider.get('name', provider_id)}」未启用，请先在设置页启用",
+            )
+        registered = get_model_by_provider_and_name(provider_id, model_name)
+        if not registered:
+            raise ProviderError(
+                code=ProviderErrorEnum.WRONG_PARAMETER,
+                message=f"模型「{model_name}」未在供应商「{provider.get('name', provider_id)}」下登记，请先在模型供应商页添加",
+            )
+        return provider_id, model_name
+
+    @staticmethod
+    def resolve_model_pair(provider_id=None, model_name=None):
+        """唯一模型解析入口：显式参数（必须成对）优先，否则用 UI 配置的默认模型。
+
+        返回严格校验后的 (provider_id, model_name)；校验失败抛 ProviderError。
+        """
+        if (provider_id is None) != (model_name is None):
+            raise ProviderError(
+                code=ProviderErrorEnum.WRONG_PARAMETER,
+                message="provider_id 与 model_name 必须同时提供，或都不提供以使用默认模型",
+            )
+        if provider_id is None or model_name is None:
+            default = DefaultModelConfigManager().get()
+            if not default:
+                raise ProviderError(
+                    code=ProviderErrorEnum.NOT_FOUND,
+                    message="未配置默认模型，请先在设置页选择默认供应商与模型",
+                )
+            try:
+                return ModelService._validate_pair(
+                    default["provider_id"], default["model_name"]
+                )
+            except ProviderError:
+                # 默认配置指向已停用供应商 / 已删除模型 → 视为未配置，提示重新设置
+                raise ProviderError(
+                    code=ProviderErrorEnum.NOT_FOUND,
+                    message="默认模型配置已失效（供应商被停用或模型被删除），请先在设置页重新选择默认供应商与模型",
+                )
+        return ModelService._validate_pair(provider_id, model_name)
+
+    @staticmethod
+    def resolve_model_config(provider_id=None, model_name=None) -> ModelConfig:
+        """解析并构建可直接调用 LLM 的 ModelConfig（供运行时直接使用）。"""
+        pid, mname = ModelService.resolve_model_pair(provider_id, model_name)
+        provider = ProviderService.get_provider_by_id(pid)
+        return ModelConfig(
+            api_key=provider["api_key"],
+            base_url=provider["base_url"],
+            model_name=mname,
+            provider=provider["type"],
+            name=provider["name"],
+        )
+
+    @staticmethod
+    def get_default_model() -> dict:
+        """返回当前默认模型；未配置返回空字段。"""
+        return DefaultModelConfigManager().get()
+
+    @staticmethod
+    def set_default_model(provider_id: str, model_name: str) -> dict:
+        """严格校验后写入默认模型（供设置页 UI 调用）。"""
+        ModelService.resolve_model_pair(provider_id, model_name)
+        return DefaultModelConfigManager().set(provider_id, model_name)
 
     @staticmethod
     def _build_model_config(provider: dict) -> ModelConfig:

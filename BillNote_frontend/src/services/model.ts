@@ -45,3 +45,12 @@ export const fetchEnableModels = async () => {
 export const deleteModelById = async (modelId: number) => {
   return await request.get(`/models/delete/${modelId}`)
 }
+
+// ---- 默认模型（服务端唯一兜底，设置页/引导写入）----
+export const getDefaultModel = async (opts?: CallOpts) => {
+  return await request.get('/default_model', cfg(opts))
+}
+
+export const setDefaultModel = async (data: { provider_id: string; model_name: string }, opts?: CallOpts) => {
+  return await request.post('/default_model', data, cfg(opts))
+}

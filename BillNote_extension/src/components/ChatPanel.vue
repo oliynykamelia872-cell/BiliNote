@@ -17,7 +17,7 @@ const scrollEl = ref<HTMLElement | null>(null)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
 const ready = computed(() => indexState.value === 'indexed')
-const canSend = computed(() => ready.value && draft.value.trim().length > 0 && !sending.value && !!settings.value.providerId && !!settings.value.modelName)
+const canSend = computed(() => ready.value && draft.value.trim().length > 0 && !sending.value)
 
 async function pollIndex() {
   try {
@@ -63,8 +63,10 @@ async function send() {
       task_id: props.taskId,
       question,
       history: messages.value.slice(0, -1),
-      provider_id: settings.value.providerId,
-      model_name: settings.value.modelName,
+      // 未显式选择时省略模型字段，交由后端默认模型解析
+      ...(settings.value.providerId && settings.value.modelName
+        ? { provider_id: settings.value.providerId, model_name: settings.value.modelName }
+        : {}),
     }) as { answer?: string, content?: string, message?: string } | string
     const reply = typeof res === 'string'
       ? res

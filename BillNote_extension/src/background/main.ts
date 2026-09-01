@@ -64,8 +64,6 @@ async function startTask(url: string, title?: string): Promise<{ ok: boolean, ta
     return { ok: false, error: '当前链接不是支持的视频平台' }
 
   const settings = await readSettings()
-  if (!settings.providerId || !settings.modelName)
-    return { ok: false, error: '请先在设置页选择供应商与模型' }
 
   const backend = settings.backendUrl.replace(/\/$/, '')
 
@@ -81,8 +79,10 @@ async function startTask(url: string, title?: string): Promise<{ ok: boolean, ta
         video_url: url,
         platform,
         quality: settings.quality,
-        provider_id: settings.providerId,
-        model_name: settings.modelName,
+        // 未显式选择时省略模型字段，交由后端默认模型解析
+        ...(settings.providerId && settings.modelName
+          ? { provider_id: settings.providerId, model_name: settings.modelName }
+          : {}),
         // backend 同时接受 format 数组与 screenshot/link 单独布尔；从 formats 派生保持单一真相源
         format: [...formats],
         screenshot: formats.includes('screenshot'),

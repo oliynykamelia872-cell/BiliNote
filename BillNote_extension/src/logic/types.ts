@@ -33,8 +33,9 @@ export interface GenerateRequest {
   video_url: string
   platform: Platform
   quality: Quality
-  model_name: string
-  provider_id: string
+  // 模型参数可选：都不传时使用服务端默认模型（UI 设置页配置）
+  model_name?: string
+  provider_id?: string
   screenshot?: boolean
   link?: boolean
   format?: string[]

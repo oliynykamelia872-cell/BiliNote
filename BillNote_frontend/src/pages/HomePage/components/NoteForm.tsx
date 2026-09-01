@@ -37,7 +37,7 @@ import {
 import { Input } from '@/components/ui/input.tsx'
 import { Textarea } from '@/components/ui/textarea.tsx'
 import { noteStyles, noteFormats, videoPlatforms } from '@/constant/note.ts'
-import { fetchModels } from '@/services/model.ts'
+import { getDefaultModel } from '@/services/model.ts'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
@@ -74,7 +74,7 @@ const formSchema = z
       return
     }
     if (!model_name) {
-      ctx.addIssue({ code: 'custom', message: '请选择模型', path: ['model_name'] })
+      ctx.addIssue({ code: 'custom', message: '请选择模型（或先在设置页配置默认模型）', path: ['model_name'] })
     }
     if (platform === 'local') {
       if (!video_url) {
@@ -159,6 +159,10 @@ const NoteForm = () => {
   const { addPendingTask, currentTaskId, setCurrentTask, getCurrentTask, retryTask } =
     useTaskStore()
   const { loadEnabledModels, modelList, showFeatureHint, setShowFeatureHint } = useModelStore()
+  const [defaultModel, setDefaultModelState] = useState<{ provider_id: string, model_name: string }>({
+    provider_id: '',
+    model_name: '',
+  })
 
   /* ---- 表单 ---- */
   const form = useForm<NoteFormValues>({
@@ -167,7 +171,7 @@ const NoteForm = () => {
       platform: 'bilibili',
       mode: 'video',
       quality: 'medium',
-      model_name: modelList[0]?.model_name || '',
+      model_name: '',
       style: 'minimal',
       video_interval: 6,
       grid_size: [2, 2],
@@ -191,7 +195,16 @@ const NoteForm = () => {
   /* ---- 副作用 ---- */
   useEffect(() => {
     loadEnabledModels()
-
+    // 服务端默认模型（UI 设置页配置）作为表单默认，未配置则留空让用户选择
+    getDefaultModel({ silent: true })
+      .then((def: any) => {
+        if (def?.provider_id && def?.model_name) {
+          setDefaultModelState({ provider_id: def.provider_id, model_name: def.model_name })
+          if (!currentTask)
+            form.setValue('model_name', def.model_name)
+        }
+      })
+      .catch(() => {})
     return
   }, [])
   useEffect(() => {
@@ -204,7 +217,7 @@ const NoteForm = () => {
       platform: formData.platform || 'bilibili',
       mode: formData.mode || 'video',
       video_url: formData.video_url || '',
-      model_name: formData.model_name || modelList[0]?.model_name || '',
+      model_name: formData.model_name || defaultModel.model_name || '',
       style: formData.style || 'minimal',
       quality: formData.quality || 'medium',
       extras: formData.extras || '',
@@ -222,6 +235,7 @@ const NoteForm = () => {
     modelList.length,
     // 还要加上 formData 的各字段，或者直接 currentTask
     currentTask?.formData,
+    defaultModel.model_name,
   ])
 
   /* 选中本地音频时，自动关闭截图与视频理解选项 */
@@ -263,8 +277,12 @@ const NoteForm = () => {
       documentData.append('file', values.document_file)
       documentData.append('ocr_mode', values.ocr_mode)
       if (values.ocr_mode !== 'offline_only' && values.ocr_mode !== 'off' && values.model_name) {
-        documentData.append('model_name', values.model_name)
-        documentData.append('provider_id', modelList.find(m => m.model_name === values.model_name)?.provider_id || '')
+        const matched = modelList.find(m => m.model_name === values.model_name)
+        // 只有能在已登记模型列表中定位到供应商才携带模型参数，否则交由后端默认模型
+        if (matched) {
+          documentData.append('model_name', values.model_name)
+          documentData.append('provider_id', matched.provider_id)
+        }
       }
       try {
         const data = await convertDocument(documentData)
@@ -274,13 +292,16 @@ const NoteForm = () => {
       }
       return
     }
-    const payload: NoteFormValues = {
+    const matched = modelList.find(m => m.model_name === values.model_name)
+    const payload = {
       ...values,
       video_url:
         values.platform === 'local' ? values.video_url : withScheme(values.video_url || ''),
-      provider_id: modelList.find(m => m.model_name === values.model_name)!.provider_id,
+      ...(matched ? { provider_id: matched.provider_id } : {}),
+      // 定位不到供应商时不携带模型参数，交由后端默认模型解析
+      model_name: matched ? values.model_name : undefined,
       task_id: currentTaskId || '',
-    }
+    } as NoteFormValues
     if (currentTaskId) {
       retryTask(currentTaskId, payload)
       return
@@ -408,7 +429,7 @@ const NoteForm = () => {
                 render={({ field }) => (
                   <FormItem>
                     <SectionHeader title="视觉模型" tip="仅在离线 OCR 未识别到文字时作为兜底使用" />
-                    <Select value={field.value || ''} onValueChange={field.onChange}>
+                    <Select value={field.value || defaultModel.model_name || ''} onValueChange={field.onChange}>
                       <FormControl><SelectTrigger><SelectValue placeholder="不使用视觉模型" /></SelectTrigger></FormControl>
                       <SelectContent>
                         {modelList.map(model => <SelectItem key={model.id} value={model.model_name}>{model.model_name}</SelectItem>)}

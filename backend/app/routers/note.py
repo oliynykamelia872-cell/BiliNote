@@ -14,8 +14,10 @@ from app.db.video_task_dao import get_task_by_video
 from app.enmus.exception import NoteErrorEnum
 from app.enmus.note_enums import DownloadQuality
 from app.exceptions.note import NoteError
+from app.exceptions.provider import ProviderError
 from app.services.note import NoteGenerator, logger, update_task_status
 from app.services.document_converter import DocumentConverter, DocumentConversionError
+from app.services.model import ModelService
 from app.services.task_serial_executor import TaskCancelledError, task_serial_executor
 from app.utils.response import ResponseWrapper as R
 from app.utils.url_parser import extract_video_id, normalize_video_url
@@ -42,8 +44,9 @@ class VideoRequest(BaseModel):
     quality: DownloadQuality
     screenshot: Optional[bool] = False
     link: Optional[bool] = False
-    model_name: str
-    provider_id: str
+    # 模型参数可选：都不传时使用 UI 设置页配置的默认模型（服务端解析）
+    model_name: Optional[str] = None
+    provider_id: Optional[str] = None
     task_id: Optional[str] = None
     format: Optional[list] = []
     style: str = None
@@ -257,8 +260,17 @@ async def convert_document(
         return R.error("不支持的文件格式，请上传受支持的本地文档、数据、图片或 ZIP 文件", code=400)
     if ocr_mode not in {"offline_first", "offline_only", "visual_fallback", "off"}:
         return R.error("无效的 OCR 策略", code=400)
-    if ocr_mode == "visual_fallback" and (not model_name or not provider_id):
-        return R.error("视觉模型 OCR 需要选择模型和提供者", code=400)
+    # 入队前解析视觉模型：显式参数成对校验；visual_fallback 必须解析到可用模型
+    # （显式或默认）；offline_first 未提供模型时保持离线行为，仅在显式给出时校验。
+    resolved_provider_id: Optional[str] = None
+    resolved_model_name: Optional[str] = None
+    if ocr_mode == "visual_fallback" or model_name or provider_id:
+        try:
+            resolved_provider_id, resolved_model_name = ModelService.resolve_model_pair(
+                model_name, provider_id
+            )
+        except ProviderError as e:
+            return R.error(msg=e.message, code=400)
 
     task_id = str(uuid.uuid4())
     upload_dir = DOCUMENT_UPLOAD_DIR / task_id
@@ -289,7 +301,10 @@ async def convert_document(
     if not task_serial_executor.reserve(task_id):
         return R.error("任务创建失败，请重试", code=500)
     update_task_status(task_id, TaskStatus.PENDING, "文档已进入转换队列")
-    background_tasks.add_task(run_document_task, task_id, str(source_path), original_name, ocr_mode, model_name, provider_id)
+    background_tasks.add_task(
+        run_document_task, task_id, str(source_path), original_name, ocr_mode,
+        resolved_model_name, resolved_provider_id,
+    )
     return R.success({"task_id": task_id})
 
 
@@ -339,6 +354,14 @@ def generate_note(data: VideoRequest, background_tasks: BackgroundTasks):
                     },
                 )
 
+        # 入队前解析模型：显式参数（成对）优先，否则用默认模型；失败立即返回
+        try:
+            model_provider_id, model_name = ModelService.resolve_model_pair(
+                data.provider_id, data.model_name
+            )
+        except ProviderError as e:
+            return R.error(msg=e.message)
+
         video_id = extract_video_id(data.video_url, data.platform)
         # if not video_id:
         #     raise HTTPException(status_code=400, detail="无法提取视频 ID")
@@ -373,9 +396,11 @@ def generate_note(data: VideoRequest, background_tasks: BackgroundTasks):
                 logger.warning(f"写入预取字幕失败 (task_id={task_id}): {e}")
 
         background_tasks.add_task(run_note_task, task_id, data.video_url, data.platform, data.quality, data.link,
-                                  data.screenshot, data.model_name, data.provider_id, data.format, data.style,
+                                  data.screenshot, model_name, model_provider_id, data.format, data.style,
                                   data.extras, data.video_understanding, data.video_interval, data.grid_size)
         return R.success({"task_id": task_id})
+    except ProviderError as e:
+        return R.error(msg=e.message)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,10 +1,14 @@
+from typing import Optional
+
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 
 from app.services.chat_service import chat as chat_service
+from app.exceptions.provider import ProviderError
 from app.services.provider import ProviderService
 from app.models.model_config import ModelConfig
 from app.gpt.gpt_factory import GPTFactory
+from app.services.model import ModelService
 from app.services.vector_store import VectorStoreManager
 from app.utils.logger import get_logger
 from app.utils.response import ResponseWrapper as R
@@ -30,8 +34,9 @@ class AskRequest(BaseModel):
     task_id: str
     question: str
     history: list[ChatMessage] = []
-    provider_id: str
-    model_name: str
+    # 模型参数可选：都不传时使用 UI 设置页配置的默认模型
+    provider_id: Optional[str] = None
+    model_name: Optional[str] = None
 
 
 class ReviseRequest(BaseModel):
@@ -40,8 +45,8 @@ class ReviseRequest(BaseModel):
     markdown: str
     selection: str = ""
     history: list[ChatMessage] = []
-    provider_id: str
-    model_name: str
+    provider_id: Optional[str] = None
+    model_name: Optional[str] = None
 
 
 def _do_index(task_id: str):
@@ -98,6 +103,9 @@ def chat_status(task_id: str):
 def ask_question(data: AskRequest):
     """基于笔记内容的 RAG 问答。"""
     try:
+        provider_id, model_name = ModelService.resolve_model_pair(
+            data.provider_id, data.model_name
+        )
         history = [{"role": m.role, "content": m.content} for m in data.history]
         result = chat_service(
             task_id=data.task_id,
@@ -107,6 +115,8 @@ def ask_question(data: AskRequest):
             model_name=data.model_name,
         )
         return R.success(data=result)
+    except ProviderError as e:
+        return R.error(msg=e.message)
     except ValueError as e:
         return R.error(msg=str(e))
     except Exception as e:
@@ -121,11 +131,14 @@ def revise_note(data: ReviseRequest):
     if len(data.markdown) > 200000:
         return R.error(msg="Markdown 内容过长，请先拆分文稿", code=400)
     try:
-        provider = ProviderService.get_provider_by_id(data.provider_id)
+        provider_id, model_name = ModelService.resolve_model_pair(
+            data.provider_id, data.model_name
+        )
+        provider = ProviderService.get_provider_by_id(provider_id)
         if not provider:
-            raise ValueError(f"未找到模型供应商: {data.provider_id}")
+            raise ValueError(f"未找到模型供应商: {provider_id}")
         config = ModelConfig(
-            api_key=provider["api_key"], base_url=provider["base_url"], model_name=data.model_name,
+            api_key=provider["api_key"], base_url=provider["base_url"], model_name=model_name,
             provider=provider["type"], name=provider["name"],
         )
         gpt = GPTFactory.from_config(config)
@@ -144,6 +157,8 @@ def revise_note(data: ReviseRequest):
             raise ValueError("模型没有返回修订内容")
         full_candidate = data.markdown.replace(data.selection, candidate, 1) if data.selection else candidate
         return R.success(data={"candidate_markdown": full_candidate, "scope": scope, "notes": "已根据指令生成候选修订稿"})
+    except ProviderError as exc:
+        return R.error(msg=exc.message, code=400)
     except ValueError as exc:
         return R.error(msg=str(exc), code=400)
     except Exception as exc:

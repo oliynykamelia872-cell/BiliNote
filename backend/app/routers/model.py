@@ -1,10 +1,18 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.exceptions.provider import ProviderError
 from app.services.model import ModelService
 from app.utils.response import ResponseWrapper as R
 router = APIRouter()
 modelService = ModelService()
+
+
+class DefaultModelRequest(BaseModel):
+    provider_id: str
+    model_name: str
+
+
 class CreateModelRequest(BaseModel):
     provider_id: str
     model_name: str
@@ -13,6 +21,29 @@ class CreateModelRequest(BaseModel):
 class ModelItem(BaseModel):
     id: int
     model_name: str
+
+
+@router.get("/default_model")
+def get_default_model():
+    """返回 UI 设置页写入的默认模型；未配置返回空字段。"""
+    try:
+        return R.success(data=ModelService.get_default_model(), msg="获取默认模型成功")
+    except Exception as e:
+        return R.error(str(e))
+
+
+@router.post("/default_model")
+def set_default_model(data: DefaultModelRequest):
+    """保存默认模型：严格校验供应商启用 + 模型已登记后写入。"""
+    try:
+        res = ModelService.set_default_model(data.provider_id, data.model_name)
+        return R.success(data=res, msg="保存默认模型成功")
+    except ProviderError as e:
+        return R.error(msg=e.message)
+    except Exception as e:
+        return R.error(str(e))
+
+
 @router.get("/model_list")
 def model_list():
     try:

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { getProviders, ping } from '~/logic/api'
+import { getDefaultModel, getProviders, ping, setDefaultModel } from '~/logic/api'
 import { settings, settingsReady } from '~/logic/storage'
 import { getModelsByProvider } from '~/logic/api'
 import { NOTE_FORMATS, NOTE_STYLES, type Model, type NoteFormat, type Provider } from '~/logic/types'
@@ -23,6 +23,22 @@ async function refresh() {
   status.value = { kind: 'idle', text: '' }
   try {
     providers.value = (await getProviders()).filter(p => p.enabled === 1)
+    // 服务端默认模型预填：本地没选过才用（本地显式值保持优先，作为请求覆盖）
+    try {
+      const def = await getDefaultModel()
+      if (def?.provider_id && def?.model_name) {
+        if (!settings.value.providerId) {
+          settings.value.providerId = def.provider_id
+          settings.value.modelName = def.model_name
+        }
+        else if (!settings.value.modelName && settings.value.providerId === def.provider_id) {
+          settings.value.modelName = def.model_name
+        }
+      }
+    }
+    catch {
+      // 后端未配置 / 不支持时忽略，仅作预填
+    }
     if (settings.value.providerId)
       await refreshModels(settings.value.providerId)
     status.value = { kind: 'ok', text: `已加载 ${providers.value.length} 个供应商` }
@@ -35,6 +51,23 @@ async function refresh() {
   finally {
     loading.value = false
   }
+}
+
+async function persistDefaultModel() {
+  if (!settings.value.providerId || !settings.value.modelName)
+    return
+  try {
+    await setDefaultModel(settings.value.providerId, settings.value.modelName)
+    status.value = { kind: 'ok', text: '默认模型已保存到服务端（Web / 扩展 / 脚本共用）' }
+  }
+  catch (e) {
+    status.value = { kind: 'err', text: `保存默认模型失败：${(e as Error).message}` }
+  }
+}
+
+function onProviderChange() {
+  // 换供应商后清空旧模型名，避免把上一个供应商的模型当成当前选择提交
+  settings.value.modelName = ''
 }
 
 async function refreshModels(providerId: string) {
@@ -103,7 +136,7 @@ onMounted(async () => {
       <h2 class="font-semibold">默认供应商与模型</h2>
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-gray-600">供应商</span>
-        <select v-model="settings.providerId" class="input">
+        <select v-model="settings.providerId" class="input" @change="onProviderChange">
           <option value="">— 选择供应商 —</option>
           <option v-for="p in providers" :key="p.id" :value="p.id">
             {{ p.name }} <span v-if="p.type === 'built-in'">(内置)</span>
@@ -112,7 +145,12 @@ onMounted(async () => {
       </label>
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-gray-600">模型</span>
-        <select v-model="settings.modelName" class="input" :disabled="!settings.providerId">
+        <select
+          v-model="settings.modelName"
+          class="input"
+          :disabled="!settings.providerId"
+          @change="persistDefaultModel"
+        >
           <option value="">— 选择模型 —</option>
           <option v-for="m in models" :key="m.id" :value="m.model_name">{{ m.model_name }}</option>
         </select>

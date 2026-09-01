@@ -5,8 +5,8 @@ export const generateNote = async (data: {
   video_url: string
   platform: string
   quality: string
-  model_name: string
-  provider_id: string
+  model_name?: string
+  provider_id?: string
   task_id?: string
   format: Array<string>
   style: string

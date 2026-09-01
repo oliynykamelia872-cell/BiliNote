@@ -106,6 +106,23 @@ export async function deleteModel(modelId: number | string): Promise<void> {
   await request(`/api/models/delete/${modelId}`)
 }
 
+// ---- 默认模型（服务端唯一兜底，设置页写入）----
+export interface DefaultModel {
+  provider_id: string
+  model_name: string
+}
+
+export async function getDefaultModel(): Promise<DefaultModel> {
+  return request<DefaultModel>('/api/default_model')
+}
+
+export async function setDefaultModel(providerId: string, modelName: string): Promise<DefaultModel> {
+  return request<DefaultModel>('/api/default_model', {
+    method: 'POST',
+    body: JSON.stringify({ provider_id: providerId, model_name: modelName }),
+  })
+}
+
 // ---- Transcriber ----
 export async function getTranscriberConfig(): Promise<TranscriberConfig> {
   return request<TranscriberConfig>('/api/transcriber_config')

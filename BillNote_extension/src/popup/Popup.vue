@@ -61,10 +61,6 @@ async function start() {
     errorMsg.value = '当前页面不是支持的视频链接'
     return
   }
-  if (!settings.value.providerId || !settings.value.modelName) {
-    errorMsg.value = '请先去设置页选择供应商和模型'
-    return
-  }
   submitting.value = true
   try {
     // B 站：在用户浏览器里直接抓字幕（带本地登录态 cookie），跳过后端的 download_subtitles 与音频转写
@@ -74,8 +70,10 @@ async function start() {
       video_url: tabUrl.value,
       platform: platform.value!,
       quality: settings.value.quality,
-      provider_id: settings.value.providerId,
-      model_name: settings.value.modelName,
+      // 未显式选择时省略模型字段，交由后端默认模型（UI 设置页配置）解析
+      ...(settings.value.providerId && settings.value.modelName
+        ? { provider_id: settings.value.providerId, model_name: settings.value.modelName }
+        : {}),
       // backend VideoRequest 同时接受 format 数组与 screenshot/link 单独布尔，从 formats 派生保持单一真相源
       format: [...formats],
       screenshot: formats.includes('screenshot'),
@@ -272,13 +270,13 @@ onUnmounted(() => {
         <span v-if="settings.providerId && settings.modelName">
           模型：{{ settings.modelName }}
         </span>
-        <span v-else class="text-amber-700">
-          ⚠ 未选择供应商/模型，
-          <button class="underline" @click="openOptions">去设置</button>
+        <span v-else class="text-gray-500">
+          模型：默认（未显式选择，
+          <button class="underline" @click="openOptions">去设置</button>）
         </span>
       </div>
 
-      <button class="btn-primary" :disabled="!supported || submitting || !settings.providerId" @click="start">
+      <button class="btn-primary" :disabled="!supported || submitting" @click="start">
         {{ submitting ? '提交中…' : '生成笔记' }}
       </button>
     </fieldset>
