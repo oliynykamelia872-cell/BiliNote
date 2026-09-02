@@ -65,6 +65,20 @@ BiliNote 是一个开源的 AI 视频笔记助手，支持通过哔哩哔哩、Y
 
 ## 📝 使用文档
 详细文档可以查看[这里](https://docs.bilinote.app/)
+
+### 本地音频批量总结
+
+批量脚本支持并发处理本地音频，并会将每个任务的状态写入状态文件，单个任务失败不会中断其它任务：
+
+```bash
+python3 scripts/batch_summarize_local.py \
+  --source-dir "/path/to/audio" \
+  --dest-dir "/path/to/obsidian/folder" \
+  --concurrency 3
+```
+
+`--concurrency`（也可用 `BATCH_CONCURRENCY`）控制脚本同时在途的任务数。后端实际执行数由 `TASK_MAX_WORKERS` 控制，修改后需重启后端；建议两者设置为相同值。
+
 ## 📦 桌面版下载
 本项目提供了 Windows 和 macOS 桌面客户端，可在 [Releases](https://github.com/JefferyHcool/BiliNote/releases) 页面下载最新版本。
 
