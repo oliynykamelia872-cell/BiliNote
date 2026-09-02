@@ -77,7 +77,7 @@ python3 scripts/batch_summarize_local.py \
   --concurrency 3
 ```
 
-`--concurrency`（也可用 `BATCH_CONCURRENCY`）控制脚本同时在途的任务数。后端实际执行数由 `TASK_MAX_WORKERS` 控制，修改后需重启后端；建议两者设置为相同值。
+`--concurrency`（也可用 `BATCH_CONCURRENCY`）控制脚本同时在途的任务数，最大为 5。后端实际执行数由 `TASK_MAX_WORKERS` 控制，同样最大为 5；修改后需重启后端，建议两者设置为相同值。
 
 ## 📦 桌面版下载
 本项目提供了 Windows 和 macOS 桌面客户端，可在 [Releases](https://github.com/JefferyHcool/BiliNote/releases) 页面下载最新版本。

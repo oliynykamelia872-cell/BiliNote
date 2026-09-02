@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
+MAX_TASK_WORKERS = 5
 
 
 def _configured_worker_count() -> int:
@@ -14,7 +15,7 @@ def _configured_worker_count() -> int:
         configured = int(os.getenv("TASK_MAX_WORKERS", "3"))
     except (TypeError, ValueError):
         configured = 3
-    return max(1, configured)
+    return min(MAX_TASK_WORKERS, max(1, configured))
 
 
 class TaskCancelledError(RuntimeError):
@@ -25,9 +26,8 @@ class ConcurrentTaskExecutor:
     """使用线程池并发执行任务，替代原来的串行锁。"""
 
     def __init__(self, max_workers: int | None = None):
-        self._max_workers = max_workers if max_workers is not None else _configured_worker_count()
-        if self._max_workers < 1:
-            raise ValueError("max_workers must be greater than zero")
+        configured_workers = max_workers if max_workers is not None else _configured_worker_count()
+        self._max_workers = min(MAX_TASK_WORKERS, max(1, configured_workers))
         self._pool = ThreadPoolExecutor(max_workers=self._max_workers)
         self._active_task_ids: set[str] = set()
         self._cancelled_task_ids: set[str] = set()

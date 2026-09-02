@@ -17,6 +17,11 @@ TaskCancelledError = task_serial_executor.TaskCancelledError
 
 
 class TestTaskSerialExecutor(unittest.TestCase):
+    def test_executor_caps_worker_limit_at_five(self):
+        executor = SerialTaskExecutor(max_workers=99)
+        self.assertEqual(executor._max_workers, 5)
+        executor.shutdown()
+
     def test_executor_respects_worker_limit(self):
         executor = SerialTaskExecutor(max_workers=1)
         state_lock = threading.Lock()

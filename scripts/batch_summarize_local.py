@@ -35,6 +35,7 @@ INVALID_FILENAME_CHARS = set('\\/:*?"<>|#[]')
 # macOS 系统代理会被 urllib 自动读取，导致本地后端请求被代理断开；这里直连本地。
 NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 DEFAULT_NOTE_WRITE_LOCK = threading.Lock()
+MAX_CONCURRENCY = 5
 
 
 def log(msg, err=False):
@@ -266,6 +267,8 @@ def positive_int(value):
     parsed = int(value)
     if parsed < 1:
         raise argparse.ArgumentTypeError("必须是大于 0 的整数")
+    if parsed > MAX_CONCURRENCY:
+        raise argparse.ArgumentTypeError(f"最大并发数为 {MAX_CONCURRENCY}")
     return parsed
 
 
@@ -292,8 +295,8 @@ def main():
     parser.add_argument(
         "--concurrency",
         type=positive_int,
-        default=os.environ.get("BATCH_CONCURRENCY", "3"),
-        help="同时提交并等待的任务数（默认: 3；也可设 BATCH_CONCURRENCY）",
+        default=positive_int(os.environ.get("BATCH_CONCURRENCY", "3")),
+        help="同时提交并等待的任务数（默认: 3，最大: 5；也可设 BATCH_CONCURRENCY）",
     )
     parser.add_argument("--limit", type=int, default=0, help="Only process the first N files (0 = all)")
     parser.add_argument("--start-from", default=None, help="Resume from this filename (inclusive)")
